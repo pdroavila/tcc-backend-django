@@ -1,5 +1,5 @@
 from rest_framework import generics
-from .models import Curso, CursoPolo, Inscricao, Candidato, Pais, Cidade, Polo, Endereco, HistoricoEducacional
+from .models import Curso, CursoPolo, Inscricao, Candidato, Pais, Cidade, Polo, Endereco, HistoricoEducacional, UsuarioAdmin
 from .serializers import CursoSerializer, PoloSerializer, InscricaoSerializer, CandidatoSerializer, CidadeSerializer, HistoricoEducacionalSerializer, UsuarioAdminLoginSerializer, UsuarioAdminRegistroSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
@@ -9,7 +9,7 @@ from django.db import transaction
 import hashlib, os
 from datetime import datetime
 from rest_framework import serializers
-from .utils import enviar_email
+from .utils import enviar_email, enviar_email_recuperacao
 from rest_framework.views import APIView
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
@@ -17,6 +17,9 @@ from django.conf import settings
 from django.http import FileResponse, Http404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from django.utils import timezone
+from datetime import timedelta
+
 
 
 class CursoListView(generics.ListAPIView):
@@ -457,6 +460,7 @@ class LoginView(APIView):
         if serializer.is_valid():
             username = serializer.validated_data['username']
             password = serializer.validated_data['password']
+            print(password)
             user = authenticate(request, username=username, password=password)
             if user:
                 refresh = RefreshToken.for_user(user)
@@ -477,3 +481,34 @@ class VerificarTokenView(APIView):
             "user": request.user.username,
             "user_id": request.user.id
         })
+    
+class SolicitarRecuperacaoSenhaView(APIView):
+    def post(self, request):
+        email = request.data.get('email')
+        try:
+            usuario = UsuarioAdmin.objects.get(email=email)
+            usuario.gerar_token_recuperacao_senha()
+            enviar_email_recuperacao(usuario, usuario.token_recuperacao_senha)
+            return Response({"message": "Se o e-mail existir, o e-mail de recuperação será enviado."}, status=status.HTTP_200_OK)
+        except UsuarioAdmin.DoesNotExist:
+            return Response({"message": "Se o e-mail existir, o e-mail de recuperação será enviado."}, status=status.HTTP_200_OK)
+        
+class AlterarSenhaView(APIView):
+    def post(self, request):
+        token = request.data.get('token')
+        nova_senha = request.data.get('nova_senha')
+
+        try:
+            usuario = UsuarioAdmin.objects.get(token_recuperacao_senha=token)
+
+            if (timezone.now() - timedelta(hours=3)) > timezone.localtime(usuario.token_expira_em):
+                return Response({"message": "Token expirado."}, status=status.HTTP_400_BAD_REQUEST)
+
+            print(nova_senha)
+            usuario.set_password(nova_senha)
+            usuario.token_recuperacao_senha = None 
+            usuario.token_expira_em = None
+            usuario.save()
+            return Response({"message": "Senha alterada com sucesso."}, status=status.HTTP_200_OK)
+        except UsuarioAdmin.DoesNotExist:
+            return Response({"message": "Token inválido."}, status=status.HTTP_400_BAD_REQUEST)

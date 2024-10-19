@@ -13,6 +13,8 @@ import string
 import os
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.utils import timezone
+from datetime import timedelta
+import uuid
 
 # Função para gerar um nome único baseado no nome do arquivo e informações adicionais
 def generate_hashed_filename(filename):
@@ -229,9 +231,17 @@ class UsuarioAdmin(AbstractBaseUser):
     data_criacao = models.DateTimeField(auto_now_add=True)
     data_modificacao = models.DateTimeField(auto_now=True)
     last_login = models.DateTimeField(default=timezone.now)
+    token_recuperacao_senha = models.CharField(max_length=255, blank=True, null=True)
+    token_expira_em = models.DateTimeField(blank=True, null=True)
+
     class Meta:
         managed = False
         db_table = 'usuario_admin'
+
+    def gerar_token_recuperacao_senha(self):
+        self.token_recuperacao_senha = str(uuid.uuid4())
+        self.token_expira_em = timezone.now() + timedelta(minutes=10) - timedelta(hours=3)
+        self.save()
 
     objects = UsuarioAdminManager()
 

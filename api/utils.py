@@ -21,3 +21,21 @@ def enviar_email(candidato, hash, curso):
         recipient_list=[candidato.email],
         html_message=message_html  # Email em HTML
     )
+
+def enviar_email_recuperacao(usuario, token):
+    # Renderiza o template HTML com o contexto necessário
+    context = {
+        'nome': usuario.nome_completo,
+        'link_recuperacao': os.getenv('FRONT_END_URL') + "/admin/recuperar-senha/{}".format(token),
+    }
+
+    message_html = render_to_string('email_template_recuperacao.html', context)
+
+    # Enviar o email
+    send_mail(
+        subject="Recuperação de Senha!",
+        message='Para redefinir sua senha, clique no botão abaixo.',  # Texto alternativo para clientes que não suportam HTML
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[usuario.email],
+        html_message=message_html  # Email em HTML
+    )
