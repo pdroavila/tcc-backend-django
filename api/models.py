@@ -260,3 +260,22 @@ class UsuarioAdminFuncao(models.Model):
         managed = False
         db_table = 'usuario_admin_funcao'
         unique_together = (('usuario_admin', 'funcao'))
+
+
+class Tela(models.Model):
+    nome = models.CharField(max_length=255, unique=True)
+    descricao = models.CharField(max_length=255)
+    rota = models.CharField(max_length=255, unique=True)
+    id = models.BigAutoField(primary_key=True)
+
+    class Meta:
+        db_table = 'tela'
+
+class UsuarioTela(models.Model):
+    usuario = models.ForeignKey(UsuarioAdmin, on_delete=models.CASCADE)
+    tela = models.ForeignKey(Tela, on_delete=models.CASCADE)
+    id = models.BigAutoField(primary_key=True)
+
+    class Meta:
+        db_table = 'usuario_tela'
+        unique_together = ('usuario', 'tela')

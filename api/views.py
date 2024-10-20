@@ -1,5 +1,5 @@
 from rest_framework import generics
-from .models import Curso, CursoPolo, Inscricao, Candidato, Pais, Cidade, Polo, Endereco, HistoricoEducacional, UsuarioAdmin
+from .models import Curso, CursoPolo, Inscricao, Candidato, Pais, Cidade, Polo, Endereco, HistoricoEducacional, UsuarioAdmin, UsuarioTela
 from .serializers import CursoSerializer, PoloSerializer, InscricaoSerializer, CandidatoSerializer, CidadeSerializer, HistoricoEducacionalSerializer, UsuarioAdminLoginSerializer, UsuarioAdminRegistroSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
@@ -11,7 +11,7 @@ from datetime import datetime
 from rest_framework import serializers
 from .utils import enviar_email, enviar_email_recuperacao
 from rest_framework.views import APIView
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Count, Case, When, Value, CharField
 from django.shortcuts import get_object_or_404
 from django.conf import settings
 from django.http import FileResponse, Http404
@@ -19,6 +19,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.utils import timezone
 from datetime import timedelta
+
 
 
 
@@ -460,13 +461,14 @@ class LoginView(APIView):
         if serializer.is_valid():
             username = serializer.validated_data['username']
             password = serializer.validated_data['password']
-            print(password)
+            
             user = authenticate(request, username=username, password=password)
             if user:
                 refresh = RefreshToken.for_user(user)
                 return Response({
                     'refresh': str(refresh),
                     'access': str(refresh.access_token),
+                    'user_id': user.id
                 })
             return Response({'error': 'Credenciais inválidas'}, status=status.HTTP_401_UNAUTHORIZED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -512,3 +514,140 @@ class AlterarSenhaView(APIView):
             return Response({"message": "Senha alterada com sucesso."}, status=status.HTTP_200_OK)
         except UsuarioAdmin.DoesNotExist:
             return Response({"message": "Token inválido."}, status=status.HTTP_400_BAD_REQUEST)
+
+class VerificarAcessoTela(APIView):
+    def post(self, request):
+        usuario_id = request.data.get('usuario_id')
+        rota = request.data.get('rota')
+        
+        try:
+            usuario = UsuarioAdmin.objects.get(id=usuario_id)
+            # if usuario.is_root:
+            #     return Response({'tem_acesso': True})
+            
+            tem_acesso = UsuarioTela.objects.filter(
+                usuario_id=usuario_id,
+                tela__rota=rota
+            ).exists()
+            
+            return Response({'tem_acesso': tem_acesso})
+        except UsuarioAdmin.DoesNotExist:
+            return Response({'erro': 'Usuário não encontrado'}, status=404)
+        
+
+    #     def atribuir_acesso_tela(request):
+    # if not request.user.usuarioadmin.is_root:
+    #     return Response({'erro': 'Acesso negado'}, status=403)
+    
+    # usuario_id = request.data.get('usuario_id')
+    # tela_id = request.data.get('tela_id')
+    
+    # try:
+    #     usuario = UsuarioAdmin.objects.get(id=usuario_id)
+    #     tela = Tela.objects.get(id=tela_id)
+        
+    #     UsuarioTela.objects.get_or_create(usuario=usuario, tela=tela)
+        
+    #     return Response({'sucesso': True})
+    # except (UsuarioAdmin.DoesNotExist, Tela.DoesNotExist):
+    #     return Response({'erro': 'Usuário ou tela não encontrada'}, status=404)
+        
+class GraficosView(APIView):
+    def get(self, request):
+        # Inscrições por Polo Ofertante
+        inscricoes_por_polo = Candidato.objects.values('polo_ofertante__nome').annotate(total=Count('id')).order_by('polo_ofertante__nome')
+        
+        # Tipo de Escola (agora usando HistoricoEducacional)
+        tipo_escola = HistoricoEducacional.objects.annotate(
+                escola_tipo=Case(
+                    When(tipo_escola=0, then=Value('Pública')),
+                    When(tipo_escola=1, then=Value('Privada')),
+                    output_field=CharField(),
+                )
+            ).values('escola_tipo').annotate(total=Count('id'))   
+             
+        # Distribuição por Gênero
+        distribuicao_genero = Candidato.objects.annotate(
+                genero_tipo=Case(
+                    When(genero=0, then=Value('Não informado')),
+                    When(genero=1, then=Value('Masculino')),
+                    When(genero=2, then=Value('Feminino')),
+                    When(genero=3, then=Value('Outro')),
+                    output_field=CharField(),
+                )
+            ).values('genero_tipo').annotate(total=Count('id'))
+        
+         # Estado Civil (com as regras fornecidas)
+        estado_civil = Candidato.objects.annotate(
+            estado_civil_tipo=Case(
+                When(estado_civil=0, then=Value('Solteiro(a)')),
+                When(estado_civil=1, then=Value('Casado(a)')),
+                When(estado_civil=2, then=Value('Divorciado(a)')),
+                When(estado_civil=3, then=Value('Viúvo(a)')),
+                output_field=CharField(),
+            )
+        ).values('estado_civil_tipo').annotate(total=Count('id'))
+
+        # Renda per Capita
+        renda_per_capita = Candidato.objects.annotate(
+            renda_tipo=Case(
+                When(renda_per_capita=1, then=Value('Até 0,5 salário mínimo')),
+                When(renda_per_capita=2, then=Value('0,5 a 1,0 salário mínimo')),
+                When(renda_per_capita=3, then=Value('1,0 a 1,5 salário mínimo')),
+                When(renda_per_capita=4, then=Value('1,5 a 2,5 salários mínimos')),
+                When(renda_per_capita=5, then=Value('2,5 a 3,5 salários mínimos')),
+                When(renda_per_capita=6, then=Value('Acima de 3,5 salários mínimos')),
+                When(renda_per_capita=0, then=Value('Prefiro não informar')),
+                output_field=CharField(),
+            )
+        ).values('renda_tipo').annotate(total=Count('id'))
+
+        # Distribuição por Etnia
+        distribuicao_etnia = Candidato.objects.annotate(
+            etnia_tipo=Case(
+                When(etnia=1, then=Value('Branco')),
+                When(etnia=2, then=Value('Preto')),
+                When(etnia=3, then=Value('Pardo')),
+                When(etnia=4, then=Value('Amarelo')),
+                When(etnia=5, then=Value('Indígena')),
+                When(etnia=0, then=Value('Não quero informar')),
+                output_field=CharField(),
+            )
+        ).values('etnia_tipo').annotate(total=Count('id'))
+
+        # Área de Residência
+        area_residencia = Endereco.objects.annotate(
+            area_tipo=Case(
+                When(area=0, then=Value('Urbana')),
+                When(area=1, then=Value('Rural')),
+                output_field=CharField(),
+            )
+        ).values('area_tipo').annotate(total=Count('id'))
+
+        # Nível de Escolaridade
+        nivel_escolaridade = HistoricoEducacional.objects.annotate(
+            escolaridade_tipo=Case(
+                When(nivel_escolaridade=0, then=Value('Fundamental I - Completo (1º a 5º)')),
+                When(nivel_escolaridade=1, then=Value('Fundamental I - Incompleto (1º a 5º)')),
+                When(nivel_escolaridade=2, then=Value('Fundamental II - Completo (6º a 9º)')),
+                When(nivel_escolaridade=3, then=Value('Fundamental II - Incompleto (6º a 9º)')),
+                When(nivel_escolaridade=4, then=Value('Médio - Completo')),
+                When(nivel_escolaridade=5, then=Value('Médio - Incompleto')),
+                When(nivel_escolaridade=6, then=Value('Superior - Completo')),
+                When(nivel_escolaridade=7, then=Value('Superior - Incompleto')),
+                When(nivel_escolaridade=8, then=Value('Pós-graduação - Completo')),
+                When(nivel_escolaridade=9, then=Value('Pós-graduação - Incompleto')),
+                output_field=CharField(),
+            )
+        ).values('escolaridade_tipo').annotate(total=Count('id'))
+        
+        return Response({
+            'inscricoes_por_polo': list(inscricoes_por_polo),
+            'tipo_escola': list(tipo_escola),
+            'distribuicao_genero': list(distribuicao_genero),
+            'estado_civil': list(estado_civil),
+            'renda_per_capita': list(renda_per_capita),
+            'distribuicao_etnia': list(distribuicao_etnia),
+            'area_residencia': list(area_residencia),
+            'nivel_escolaridade': list(nivel_escolaridade)
+        })
