@@ -11,7 +11,7 @@ from datetime import datetime
 from rest_framework import serializers
 from .utils import enviar_email, enviar_email_recuperacao
 from rest_framework.views import APIView
-from django.db.models import Prefetch, Count, Case, When, Value, CharField
+from django.db.models import Prefetch, Count, Case, When, Value, CharField, Q
 from django.shortcuts import get_object_or_404
 from django.conf import settings
 from django.http import FileResponse, Http404
@@ -19,6 +19,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.utils import timezone
 from datetime import timedelta
+from django.utils.timezone import make_aware  
+
+
 
 
 
@@ -26,6 +29,36 @@ from datetime import timedelta
 class CursoListView(generics.ListAPIView):
     queryset = Curso.objects.all()
     serializer_class = CursoSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        nome = self.request.query_params.get('nome', None)
+        data_inicial = self.request.query_params.get('data_inicial', None)
+        data_final = self.request.query_params.get('data_final', None)
+
+        if nome:
+            queryset = queryset.filter(nome__icontains=nome)
+        
+        if data_inicial:
+            try:
+                data_inicial = datetime.strptime(data_inicial, '%Y-%m-%d')
+                data_inicial = make_aware(data_inicial)  # Converte para timezone-aware
+                queryset = queryset.filter(prazo_inscricoes__gte=data_inicial)
+            except ValueError:
+                pass
+        
+        if data_final:
+            try:
+                data_final = datetime.strptime(data_final, '%Y-%m-%d')
+                # Ajusta para o final do dia (23:59:59)
+                data_final = data_final.replace(hour=23, minute=59, second=59)
+                data_final = make_aware(data_final)  # Converte para timezone-aware
+                queryset = queryset.filter(prazo_inscricoes__lte=data_final)
+            except ValueError:
+                pass
+
+        return queryset
 
 class PolosByCursoView(generics.GenericAPIView):
     serializer_class = PoloSerializer
@@ -651,3 +684,82 @@ class GraficosView(APIView):
             'area_residencia': list(area_residencia),
             'nivel_escolaridade': list(nivel_escolaridade)
         })
+    
+class CursoCreateView(generics.CreateAPIView):
+    queryset = Curso.objects.all()
+    serializer_class = CursoSerializer
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        # Extrai os polos da requisição
+        polos_ids = request.data.pop('polos', [])
+        
+        # Cria o curso
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        curso = serializer.save()
+        
+        # Cria as relações com os polos
+        for polo_id in polos_ids:
+            CursoPolo.objects.create(
+                curso_id=curso.id,
+                polo_id=polo_id
+            )
+        
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+class PoloListView(generics.ListAPIView):
+    queryset = Polo.objects.all()
+    serializer_class = PoloSerializer
+
+class CursoDetailView(generics.RetrieveAPIView):
+    queryset = Curso.objects.all()
+    serializer_class = CursoSerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        
+        # Busca os polos relacionados ao curso
+        polos_ids = CursoPolo.objects.filter(
+            curso_id=instance.id
+        ).values_list('polo_id', flat=True)
+        
+        # Adiciona os polos ao response
+        data = serializer.data
+        data['polos'] = list(polos_ids)
+        
+        return Response(data)
+    
+
+class CursoUpdateView(generics.UpdateAPIView):
+    queryset = Curso.objects.all()
+    serializer_class = CursoSerializer
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        # Extrai os polos da requisição
+        polos_ids = request.data.pop('polos', [])
+        
+        # Atualiza o curso
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        curso = serializer.save()
+        
+        # Atualiza as relações com os polos
+        # Primeiro remove todas as relações existentes
+        CursoPolo.objects.filter(curso_id=curso.id).delete()
+        
+        # Depois cria as novas relações
+        for polo_id in polos_ids:
+            CursoPolo.objects.create(
+                curso_id=curso.id,
+                polo_id=polo_id
+            )
+        
+        # Retorna os dados atualizados incluindo os polos
+        data = serializer.data
+        data['polos'] = polos_ids
+        
+        return Response(data)

@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import CursoListView
-from .views import PolosByCursoView, PostInscricao, GetSearchCidade, CandidatoPorHashView, InscricaoDetailView, MediaImageView, UpdateInscricao, RegistroView, LoginView, VerificarTokenView, SolicitarRecuperacaoSenhaView, AlterarSenhaView, VerificarAcessoTela, GraficosView
+from .views import PolosByCursoView, PostInscricao, GetSearchCidade, CandidatoPorHashView, InscricaoDetailView, MediaImageView, UpdateInscricao, RegistroView, LoginView, VerificarTokenView, SolicitarRecuperacaoSenhaView, AlterarSenhaView, VerificarAcessoTela, GraficosView, PoloListView, CursoCreateView, CursoDetailView, CursoUpdateView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
@@ -20,4 +20,8 @@ urlpatterns = [
     path('admin/alterar-senha/', AlterarSenhaView.as_view(), name='alterar-senha'),
     path('admin/verificar-acesso/', VerificarAcessoTela.as_view(), name='verificar-acesso'),
     path('admin/graficos/', GraficosView.as_view(), name='graficos'),
+    path('admin/curso-novo', CursoCreateView.as_view(), name='curso-novo'),
+    path('polos/', PoloListView.as_view(), name='polo-list'),
+    path('admin/cursos/<int:pk>/', CursoDetailView.as_view(), name='curso-detail'),
+    path('admin/cursos/<int:pk>/update/', CursoUpdateView.as_view(), name='curso-update'),
 ]
