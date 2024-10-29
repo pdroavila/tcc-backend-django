@@ -1,7 +1,15 @@
-from django.urls import path
+from django.urls import path, include
 from .views import CursoListView
-from .views import PolosByCursoView, PostInscricao, GetSearchCidade, CandidatoPorHashView, InscricaoDetailView, MediaImageView, UpdateInscricao, RegistroView, LoginView, VerificarTokenView, SolicitarRecuperacaoSenhaView, AlterarSenhaView, VerificarAcessoTela, GraficosView, PoloListView, CursoCreateView, CursoDetailView, CursoUpdateView
+from .views import PolosByCursoView, PostInscricao, GetSearchCidade, CandidatoPorHashView, InscricaoDetailView, MediaImageView, UpdateInscricao, RegistroView, LoginView, VerificarTokenView, SolicitarRecuperacaoSenhaView, AlterarSenhaView, VerificarAcessoTela, GraficosView, PoloListView, CursoCreateView, CursoDetailView, CursoUpdateView, TelaViewSet, UsuarioAdminViewSet, InscricaoViewSet, AprovarInscricaoView, RecusarInscricaoView
 from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework.routers import DefaultRouter
+
+
+router = DefaultRouter()
+router.register(r'admin/usuarios', UsuarioAdminViewSet, basename='usuario-admin')
+router.register(r'admin/telas', TelaViewSet, basename='tela')
+router.register(r'admin/inscricoes', InscricaoViewSet, basename='inscricao')  # adicione ao router
+# /api/admin/incricoes/
 
 urlpatterns = [
     path('cursos/', CursoListView.as_view(), name='curso-list'),
@@ -24,4 +32,8 @@ urlpatterns = [
     path('polos/', PoloListView.as_view(), name='polo-list'),
     path('admin/cursos/<int:pk>/', CursoDetailView.as_view(), name='curso-detail'),
     path('admin/cursos/<int:pk>/update/', CursoUpdateView.as_view(), name='curso-update'),
+    path('admin/inscricoes/<int:pk>/aprovar/', AprovarInscricaoView.as_view(), name='aprovar-inscricao'),
+    path('admin/inscricoes/<int:pk>/rejeitar/', RecusarInscricaoView.as_view(), name='rejeitar-inscricao'),
+    path('', include(router.urls)),
+
 ]

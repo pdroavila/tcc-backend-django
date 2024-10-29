@@ -1,6 +1,6 @@
 from rest_framework import generics
-from .models import Curso, CursoPolo, Inscricao, Candidato, Pais, Cidade, Polo, Endereco, HistoricoEducacional, UsuarioAdmin, UsuarioTela
-from .serializers import CursoSerializer, PoloSerializer, InscricaoSerializer, CandidatoSerializer, CidadeSerializer, HistoricoEducacionalSerializer, UsuarioAdminLoginSerializer, UsuarioAdminRegistroSerializer
+from .models import Curso, CursoPolo, Inscricao, Candidato, Pais, Cidade, Polo, Endereco, HistoricoEducacional, UsuarioAdmin, UsuarioTela, Tela
+from .serializers import CursoSerializer, PoloSerializer, InscricaoSerializer, CandidatoSerializer, CidadeSerializer, HistoricoEducacionalSerializer, UsuarioAdminLoginSerializer, UsuarioAdminRegistroSerializer, UsuarioAdminListSerializer, UsuarioAdminUpdateSerializer, TelaSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from rest_framework.response import Response
@@ -11,15 +11,20 @@ from datetime import datetime
 from rest_framework import serializers
 from .utils import enviar_email, enviar_email_recuperacao
 from rest_framework.views import APIView
-from django.db.models import Prefetch, Count, Case, When, Value, CharField, Q
+from django.db.models import Prefetch, Count, Case, When, Value, CharField, Q, F
 from django.shortcuts import get_object_or_404
 from django.conf import settings
 from django.http import FileResponse, Http404
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.utils import timezone
 from datetime import timedelta
 from django.utils.timezone import make_aware  
+from django_filters import rest_framework as filters
+from rest_framework import viewsets
+from django_filters.rest_framework import DjangoFilterBackend
+from django_filters import rest_framework as django_filters
+from rest_framework.decorators import action
 
 
 
@@ -29,6 +34,7 @@ from django.utils.timezone import make_aware
 class CursoListView(generics.ListAPIView):
     queryset = Curso.objects.all()
     serializer_class = CursoSerializer
+    pagination_class = None  # Desativa a paginação
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -567,24 +573,6 @@ class VerificarAcessoTela(APIView):
         except UsuarioAdmin.DoesNotExist:
             return Response({'erro': 'Usuário não encontrado'}, status=404)
         
-
-    #     def atribuir_acesso_tela(request):
-    # if not request.user.usuarioadmin.is_root:
-    #     return Response({'erro': 'Acesso negado'}, status=403)
-    
-    # usuario_id = request.data.get('usuario_id')
-    # tela_id = request.data.get('tela_id')
-    
-    # try:
-    #     usuario = UsuarioAdmin.objects.get(id=usuario_id)
-    #     tela = Tela.objects.get(id=tela_id)
-        
-    #     UsuarioTela.objects.get_or_create(usuario=usuario, tela=tela)
-        
-    #     return Response({'sucesso': True})
-    # except (UsuarioAdmin.DoesNotExist, Tela.DoesNotExist):
-    #     return Response({'erro': 'Usuário ou tela não encontrada'}, status=404)
-        
 class GraficosView(APIView):
     def get(self, request):
         # Inscrições por Polo Ofertante
@@ -711,6 +699,7 @@ class CursoCreateView(generics.CreateAPIView):
 class PoloListView(generics.ListAPIView):
     queryset = Polo.objects.all()
     serializer_class = PoloSerializer
+    pagination_class = None  # Desativa a paginação
 
 class CursoDetailView(generics.RetrieveAPIView):
     queryset = Curso.objects.all()
@@ -763,3 +752,239 @@ class CursoUpdateView(generics.UpdateAPIView):
         data['polos'] = polos_ids
         
         return Response(data)
+    
+
+class UsuarioAdminFilter(filters.FilterSet):
+    nome = filters.CharFilter(field_name='nome_completo', lookup_expr='icontains')
+    email = filters.CharFilter(lookup_expr='icontains')
+    
+    class Meta:
+        model = UsuarioAdmin
+        fields = ['nome', 'email']
+
+class TelaViewSet(viewsets.ReadOnlyModelViewSet):
+    pagination_class = None  # Desativa a paginação
+    queryset = Tela.objects.all()
+    serializer_class = TelaSerializer
+
+class UsuarioAdminViewSet(viewsets.ModelViewSet):
+    queryset = UsuarioAdmin.objects.all()
+    pagination_class = None  # Desativa a paginação
+    permission_classes = [AllowAny]
+    filter_backends = (DjangoFilterBackend,)
+    filterset_class = UsuarioAdminFilter  # Alterado para usar a classe de filtro personalizada
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return UsuarioAdminRegistroSerializer
+        elif self.action in ['update', 'partial_update', 'retrieve']:
+            return UsuarioAdminUpdateSerializer
+        return UsuarioAdminListSerializer
+
+    def create(self, request, *args, **kwargs):
+        # Extrair IDs das telas antes de processar o serializer
+        telas_ids = request.data.pop('telas', [])
+        
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+
+        # Criar relações de telas
+        for tela_id in telas_ids:
+            UsuarioTela.objects.create(
+                usuario_id=instance.id,
+                tela_id=tela_id
+            )
+
+        # Buscar instância atualizada com telas
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data, status=201)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        
+        # Extrair IDs das telas antes de processar o serializer
+        telas_ids = request.data.pop('telas', None)
+        
+        serializer = self.get_serializer(
+            instance,
+            data=request.data,
+            partial=partial
+        )
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        if telas_ids is not None:
+            # Atualizar relações de telas
+            UsuarioTela.objects.filter(usuario_id=instance.id).delete()
+            for tela_id in telas_ids:
+                UsuarioTela.objects.create(
+                    usuario_id=instance.id,
+                    tela_id=tela_id
+                )
+
+        # Buscar instância atualizada com telas
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        
+        return Response(serializer.data)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        data = serializer.data
+        
+        # Adicionar telas à resposta
+        data['telas'] = TelaSerializer(
+            Tela.objects.filter(
+                id__in=UsuarioTela.objects.filter(
+                    usuario_id=instance.id
+                ).values_list('tela_id', flat=True)
+            ),
+            many=True
+        ).data
+        
+        return Response(data)
+    
+class InscricaoFilter(django_filters.FilterSet):
+    nome = django_filters.CharFilter(field_name='candidato__nome_completo', lookup_expr='icontains')
+    curso = django_filters.NumberFilter(field_name='curso__id')
+    polo = django_filters.NumberFilter(field_name='candidato__polo_ofertante__id')
+    data_inicial = django_filters.DateFilter(field_name='data_criacao', lookup_expr='gte')
+    data_final = django_filters.DateFilter(field_name='data_criacao', lookup_expr='lte')
+    
+    class Meta:
+        model = Inscricao
+        fields = ['status']
+
+
+class InscricaoViewSet(viewsets.ModelViewSet):
+    queryset = Inscricao.objects.all().select_related(
+        'candidato', 'curso', 'candidato__polo_ofertante'
+    )
+    serializer_class = InscricaoSerializer
+    filterset_class = InscricaoFilter
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Handle pagination if it's enabled
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            response_data = self._add_polo_and_curso_data(serializer.data, page)
+            return self.get_paginated_response(response_data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        response_data = self._add_polo_and_curso_data(serializer.data, queryset)
+        return Response(response_data)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        response_data = self._add_single_polo_and_curso_data(serializer.data, instance)
+        return Response(response_data)
+
+    def _add_polo_and_curso_data(self, serialized_data, instances):
+        for item, instance in zip(serialized_data, instances):
+            candidato = instance.candidato
+            polo = getattr(candidato, 'polo_ofertante', None)
+            if polo:
+                item['polo'] = {
+                    'id': polo.id,
+                    'nome': polo.nome,  # Adjust field names as per your model
+                    # Include other fields as needed
+                }
+            else:
+                item['polo'] = None
+
+            # Add 'curso' data
+            curso = instance.curso
+            if curso:
+                item['curso'] = {
+                    'id': curso.id,
+                    'nome': curso.nome,  # Adjust field names as per your model
+                    # Include other fields as needed
+                }
+            else:
+                item['curso'] = None
+        return serialized_data
+
+    def _add_single_polo_and_curso_data(self, serialized_data, instance):
+        candidato = instance.candidato
+        polo = getattr(candidato, 'polo_ofertante', None)
+        if polo:
+            serialized_data['polo'] = {
+                'id': polo.id,
+                'nome': polo.nome,  # Adjust field names as per your model
+                # Include other fields as needed
+            }
+        else:
+            serialized_data['polo'] = None
+
+        # Add 'curso' data
+        curso = instance.curso
+        if curso:
+            serialized_data['curso'] = {
+                'id': curso.id,
+                'nome': curso.nome,  # Adjust field names as per your model
+                # Include other fields as needed
+            }
+        else:
+            serialized_data['curso'] = None
+
+        return serialized_data
+    
+    # @action(detail=False, methods=['get'])
+    # def export(self, request):
+    #     queryset = self.filter_queryset(self.get_queryset())
+        
+    #     response = HttpResponse(content_type='text/csv')
+    #     response['Content-Disposition'] = 'attachment; filename="inscricoes.csv"'
+        
+    #     writer = csv.writer(response)
+    #     writer.writerow([
+    #         'Nome Completo', 'Email', 'Curso', 'Polo', 
+    #         'Situação', 'Data de Inscrição'
+    #     ])
+        
+    #     for inscricao in queryset:
+    #         writer.writerow([
+    #             inscricao.candidato.nome_completo,
+    #             inscricao.candidato.email,
+    #             inscricao.curso.nome,
+    #             inscricao.polo.nome,
+    #             inscricao.status,
+    #             inscricao.data_criacao.strftime('%d/%m/%Y')
+    #         ])
+        
+    #     return response
+
+class AprovarInscricaoView(APIView):
+    def post(self, request, pk, format=None):
+        try:
+            inscricao = Inscricao.objects.get(pk=pk)
+            inscricao.status = '1'  # Ou use 1 se o campo for um inteiro
+            inscricao.save()
+            serializer = InscricaoSerializer(inscricao)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Inscricao.DoesNotExist:
+            return Response({'erro': 'Inscrição não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        
+class RecusarInscricaoView(APIView):
+    # permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk, format=None):
+        try:
+            inscricao = Inscricao.objects.get(pk=pk)
+            if inscricao.status == '2':
+                return Response({'erro': 'Inscrição já está rejeitada.'}, status=status.HTTP_400_BAD_REQUEST)
+            inscricao.status = '2'
+            inscricao.save()
+            # Recebe o motivo, mas não armazena
+            motivo = request.data.get('motivo', '')
+            serializer = InscricaoSerializer(inscricao)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Inscricao.DoesNotExist:
+            return Response({'erro': 'Inscrição não encontrada.'}, status=status.HTTP_404_NOT_FOUND)

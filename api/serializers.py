@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Curso, Polo, Candidato, Inscricao, Pais, Cidade, HistoricoEducacional, UsuarioAdmin
+from .models import Curso, Polo, Candidato, Inscricao, Pais, Cidade, HistoricoEducacional, UsuarioAdmin, Tela
 from drf_extra_fields.fields import Base64ImageField
 import base64
 import os
@@ -145,3 +145,35 @@ class UsuarioAdminRegistroSerializer(serializers.ModelSerializer):
 class UsuarioAdminLoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField()
+
+
+class TelaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tela
+        fields = ('id', 'nome', 'descricao', 'rota')
+
+class UsuarioAdminUpdateSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(required=False, write_only=True)
+    telas = TelaSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = UsuarioAdmin
+        fields = ('id', 'email', 'password', 'nome_completo', 'ativo', 'telas', 'username')
+        read_only_fields = ('id',)
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+            
+        if password:
+            instance.set_password(password)
+            
+        instance.save()
+        return instance
+    
+class UsuarioAdminListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UsuarioAdmin
+        fields = ('id', 'username', 'email', 'nome_completo', 'ativo')
