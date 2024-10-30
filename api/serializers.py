@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Curso, Polo, Candidato, Inscricao, Pais, Cidade, HistoricoEducacional, UsuarioAdmin, Tela
+from .models import Curso, Polo, Candidato, Inscricao, Pais, Cidade, HistoricoEducacional, UsuarioAdmin, Tela, InscricaoLog
 from drf_extra_fields.fields import Base64ImageField
 import base64
 import os
@@ -177,3 +177,11 @@ class UsuarioAdminListSerializer(serializers.ModelSerializer):
     class Meta:
         model = UsuarioAdmin
         fields = ('id', 'username', 'email', 'nome_completo', 'ativo')
+
+class InscricaoLogSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    usuario_nome = serializers.CharField(source='usuario.nome_completo', read_only=True)
+
+    class Meta:
+        model = InscricaoLog
+        fields = ['id', 'inscricao', 'status', 'status_display', 'data_registro', 'observacoes', 'usuario', 'usuario_nome']

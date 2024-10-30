@@ -1,6 +1,6 @@
 from rest_framework import generics
-from .models import Curso, CursoPolo, Inscricao, Candidato, Pais, Cidade, Polo, Endereco, HistoricoEducacional, UsuarioAdmin, UsuarioTela, Tela
-from .serializers import CursoSerializer, PoloSerializer, InscricaoSerializer, CandidatoSerializer, CidadeSerializer, HistoricoEducacionalSerializer, UsuarioAdminLoginSerializer, UsuarioAdminRegistroSerializer, UsuarioAdminListSerializer, UsuarioAdminUpdateSerializer, TelaSerializer
+from .models import Curso, CursoPolo, Inscricao, Candidato, Pais, Cidade, Polo, Endereco, HistoricoEducacional, UsuarioAdmin, UsuarioTela, Tela, InscricaoLog
+from .serializers import CursoSerializer, PoloSerializer, InscricaoSerializer, CandidatoSerializer, CidadeSerializer, HistoricoEducacionalSerializer, UsuarioAdminLoginSerializer, UsuarioAdminRegistroSerializer, UsuarioAdminListSerializer, UsuarioAdminUpdateSerializer, TelaSerializer, InscricaoLogSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from rest_framework.response import Response
@@ -9,7 +9,7 @@ from django.db import transaction
 import hashlib, os
 from datetime import datetime
 from rest_framework import serializers
-from .utils import enviar_email, enviar_email_recuperacao
+from .utils import enviar_email, enviar_email_recuperacao, enviar_email_aprovacao, enviar_email_rejeicao
 from rest_framework.views import APIView
 from django.db.models import Prefetch, Count, Case, When, Value, CharField, Q, F
 from django.shortcuts import get_object_or_404
@@ -25,6 +25,7 @@ from rest_framework import viewsets
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import rest_framework as django_filters
 from rest_framework.decorators import action
+from rest_framework import status, permissions
 
 
 
@@ -555,6 +556,8 @@ class AlterarSenhaView(APIView):
             return Response({"message": "Token inválido."}, status=status.HTTP_400_BAD_REQUEST)
 
 class VerificarAcessoTela(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         usuario_id = request.data.get('usuario_id')
         rota = request.data.get('rota')
@@ -574,6 +577,8 @@ class VerificarAcessoTela(APIView):
             return Response({'erro': 'Usuário não encontrado'}, status=404)
         
 class GraficosView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         # Inscrições por Polo Ofertante
         inscricoes_por_polo = Candidato.objects.values('polo_ofertante__nome').annotate(total=Count('id')).order_by('polo_ofertante__nome')
@@ -674,6 +679,7 @@ class GraficosView(APIView):
         })
     
 class CursoCreateView(generics.CreateAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = Curso.objects.all()
     serializer_class = CursoSerializer
 
@@ -702,6 +708,7 @@ class PoloListView(generics.ListAPIView):
     pagination_class = None  # Desativa a paginação
 
 class CursoDetailView(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = Curso.objects.all()
     serializer_class = CursoSerializer
 
@@ -722,6 +729,7 @@ class CursoDetailView(generics.RetrieveAPIView):
     
 
 class CursoUpdateView(generics.UpdateAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = Curso.objects.all()
     serializer_class = CursoSerializer
 
@@ -763,6 +771,7 @@ class UsuarioAdminFilter(filters.FilterSet):
         fields = ['nome', 'email']
 
 class TelaViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticated]
     pagination_class = None  # Desativa a paginação
     queryset = Tela.objects.all()
     serializer_class = TelaSerializer
@@ -770,7 +779,8 @@ class TelaViewSet(viewsets.ReadOnlyModelViewSet):
 class UsuarioAdminViewSet(viewsets.ModelViewSet):
     queryset = UsuarioAdmin.objects.all()
     pagination_class = None  # Desativa a paginação
-    permission_classes = [AllowAny]
+    # permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     filter_backends = (DjangoFilterBackend,)
     filterset_class = UsuarioAdminFilter  # Alterado para usar a classe de filtro personalizada
 
@@ -860,6 +870,7 @@ class InscricaoFilter(django_filters.FilterSet):
 
 
 class InscricaoViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
     queryset = Inscricao.objects.all().select_related(
         'candidato', 'curso', 'candidato__polo_ofertante'
     )
@@ -962,18 +973,38 @@ class InscricaoViewSet(viewsets.ModelViewSet):
     #     return response
 
 class AprovarInscricaoView(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request, pk, format=None):
         try:
+            # user_id = request.data.get('user_id', '')
             inscricao = Inscricao.objects.get(pk=pk)
-            inscricao.status = '1'  # Ou use 1 se o campo for um inteiro
+            inscricao.status = '1'
             inscricao.save()
             serializer = InscricaoSerializer(inscricao)
+
+            candidato = Candidato.objects.get(id=inscricao.candidato_id)
+            curso = Curso.objects.get(id=inscricao.curso_id)
+            usuario_admin = UsuarioAdmin.objects.get(id=request.data.get('user_id'))
+
+            InscricaoLog.objects.create(
+                inscricao=inscricao,
+                status=1, 
+                observacoes='Inscrição aprovada.',
+                usuario=usuario_admin,
+                data_registro = (timezone.now() - timedelta(hours=3))
+            )
+
+            enviar_email_aprovacao(
+                candidato,
+                curso 
+            )
+
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Inscricao.DoesNotExist:
             return Response({'erro': 'Inscrição não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         
 class RecusarInscricaoView(APIView):
-    # permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, pk, format=None):
         try:
@@ -982,9 +1013,42 @@ class RecusarInscricaoView(APIView):
                 return Response({'erro': 'Inscrição já está rejeitada.'}, status=status.HTTP_400_BAD_REQUEST)
             inscricao.status = '2'
             inscricao.save()
-            # Recebe o motivo, mas não armazena
-            motivo = request.data.get('motivo', '')
+
+            motivo = request.data.get('motivo')
+            usuario_admin = UsuarioAdmin.objects.get(id=request.data.get('user_id'))
+
+            candidato = Candidato.objects.get(id=inscricao.candidato_id)
+            curso = Curso.objects.get(id=inscricao.curso_id)
+
+            InscricaoLog.objects.create(
+                inscricao=inscricao,
+                status=0, 
+                observacoes=motivo,
+                usuario=usuario_admin,
+                data_registro = (timezone.now() - timedelta(hours=3))
+            )
+
+            enviar_email_rejeicao(
+                candidato,
+                curso,
+                motivo,
+                inscricao.hash
+            )
+
             serializer = InscricaoSerializer(inscricao)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Inscricao.DoesNotExist:
             return Response({'erro': 'Inscrição não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+        
+class InscricaoHistoricoView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, inscricao_id):
+        # Verifique se a inscrição existe
+        inscricao = get_object_or_404(Inscricao, id=inscricao_id)
+        
+        # Obtenha todos os logs relacionados à inscrição
+        logs = InscricaoLog.objects.filter(inscricao=inscricao).order_by('-data_registro')
+        
+        serializer = InscricaoLogSerializer(logs, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

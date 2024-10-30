@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Inscrição Rejeitada</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            padding-bottom: 20px;
+        }
+        .header h1 {
+            color: #E74C3C;
+        }
+        .content {
+            text-align: left;
+        }
+        .content p {
+            margin-bottom: 15px;
+        }
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            margin-top: 20px;
+            background-color: #E74C3C;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Inscrição Rejeitada</h1>
+        </div>
+        <div class="content">
+            <p>Olá {{ nome }},</p>
+            <p>Lamentamos informar que sua inscrição no curso <strong>{{ nome_curso }}</strong> foi rejeitada.</p>
+            <p><strong>Motivo da rejeição:</strong> {{ motivo_rejeicao }}</p>
+            <p>Você pode alterar suas informações e tentar se inscrever novamente através do link abaixo:</p>
+            <a href="{{ link_alterar }}" class="button">Alterar Informações da Inscrição</a>
+            <p>Se tiver alguma dúvida ou precisar de assistência, nossa equipe de suporte está à disposição para ajudá-lo(a).</p>
+            <p>Atenciosamente,<br>Equipe de Suporte</p>
+        </div>
+        <div class="footer">
+            <p>&copy; 2023 Sua Empresa. Todos os direitos reservados.</p>
+            <p>Este é um e-mail automático, por favor, não responda.</p>
+        </div>
+    </div>
+</body>
+</html>

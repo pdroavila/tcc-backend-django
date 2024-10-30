@@ -279,3 +279,19 @@ class UsuarioTela(models.Model):
     class Meta:
         db_table = 'usuario_tela'
         unique_together = ('usuario', 'tela')
+
+class InscricaoLog(models.Model):
+    STATUS_CHOICES = (
+        (0, 'Pendente'),
+        (1, 'Aprovado'),
+        (2, 'Rejeitado'),
+    )
+
+    inscricao = models.ForeignKey(Inscricao, on_delete=models.CASCADE)
+    status = models.PositiveSmallIntegerField(choices=STATUS_CHOICES, default=0)
+    data_registro = models.DateTimeField()
+    observacoes = models.TextField(null=True, blank=True)
+    usuario = models.ForeignKey(UsuarioAdmin, null=True, blank=True, on_delete=models.SET_NULL)
+
+    class Meta:
+        db_table = 'inscricao_log'

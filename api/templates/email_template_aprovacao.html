@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Aprovação no Curso!</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            padding-bottom: 20px;
+        }
+        .header h1 {
+            color: #4CAF50;
+            font-size: 24px;
+        }
+        .content {
+            text-align: left;
+        }
+        .content p {
+            margin-bottom: 15px;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 25px;
+            margin-top: 20px;
+            background-color: #4CAF50;
+            color: #ffffff !important;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Parabéns, Você Foi Aprovado!</h1>
+        </div>
+        <div class="content">
+            <p>Olá {{ nome }},</p>
+            <p>Temos o prazer de informar que sua inscrição no curso <strong>{{ nome_curso }}</strong> foi aprovada!</p>
+            <p>Se tiver alguma dúvida ou precisar de assistência, nossa equipe de suporte está à disposição para ajudá-lo(a).</p>
+            <p>Bem-vindo(a) a bordo e desejamos muito sucesso em seus estudos!</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -39,3 +39,39 @@ def enviar_email_recuperacao(usuario, token):
         recipient_list=[usuario.email],
         html_message=message_html  # Email em HTML
     )
+
+def enviar_email_aprovacao(candidato, curso):
+    context = {
+        'nome': candidato.nome_completo,
+        'nome_curso': curso.nome
+    }
+    
+    message_html = render_to_string('email_template_aprovacao.html', context)
+
+    # Enviar o email
+    send_mail(
+        subject="Sua inscrição foi aprovada!",
+        message='Parabéns! Sua inscrição foi aprovada.',  # Texto alternativo para clientes que não suportam HTML
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[candidato.email],
+        html_message=message_html  # Email em HTML
+    )
+
+def enviar_email_rejeicao(candidato, curso, motivo, hash):
+    context = {
+        'nome': candidato.nome_completo,
+        'nome_curso': curso.nome,
+        'motivo_rejeicao': motivo,
+        'link_alterar': os.getenv('FRONT_END_URL') + "/acesso/{}".format(hash),
+    }
+
+    message_html = render_to_string('email_template_rejeicao.html', context)
+
+    send_mail(
+        subject="Sua inscrição foi rejeitada!",
+        message='Infelizmente, sua inscrição foi rejeitada.',  # Texto alternativo para clientes que não suportam HTML
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[candidato.email],
+        html_message=message_html  # Email em HTML
+    )
+    
