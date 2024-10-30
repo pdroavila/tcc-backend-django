@@ -474,7 +474,7 @@ class UpdateInscricao(APIView):
             raise serializers.ValidationError(historico_educacional_serializer.errors)
 
         # Atualiza a inscrição
-        inscricao.status = data.get('status', inscricao.status)
+        inscricao.status = 0
         inscricao.data_modificacao = datetime.now()
         inscricao.curso = data['curso'] if 'curso' in data else inscricao.curso
         inscricao.save()
