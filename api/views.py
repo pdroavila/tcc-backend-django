@@ -1,37 +1,84 @@
-from rest_framework import generics
-from .models import Curso, CursoPolo, Inscricao, Candidato, Pais, Cidade, Polo, Endereco, HistoricoEducacional, UsuarioAdmin, UsuarioTela, Tela, InscricaoLog
-from .serializers import CursoSerializer, PoloSerializer, InscricaoSerializer, CandidatoSerializer, CidadeSerializer, HistoricoEducacionalSerializer, UsuarioAdminLoginSerializer, UsuarioAdminRegistroSerializer, UsuarioAdminListSerializer, UsuarioAdminUpdateSerializer, TelaSerializer, InscricaoLogSerializer
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth import authenticate
-from rest_framework.response import Response
-from rest_framework import status
-from django.db import transaction
-import hashlib, os
-from datetime import datetime
-from rest_framework import serializers
-from .utils import enviar_email, enviar_email_recuperacao, enviar_email_aprovacao, enviar_email_rejeicao
-from rest_framework.views import APIView
-from django.db.models import Prefetch, Count, Case, When, Value, CharField, Q, F
-from django.shortcuts import get_object_or_404
+# Importações da biblioteca padrão
+import hashlib
+import os
+from datetime import datetime, timedelta
+
+# Importações de terceiros
 from django.conf import settings
+from django.contrib.auth import authenticate
+from django.db import transaction
+from django.db.models import (
+    Case,
+    CharField,
+    Count,
+    F,
+    Prefetch,
+    Q,
+    Value,
+    When,
+)
+from django.shortcuts import get_object_or_404
 from django.http import FileResponse, Http404
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.utils import timezone
-from datetime import timedelta
-from django.utils.timezone import make_aware  
+from django.utils.timezone import make_aware
+
 from django_filters import rest_framework as filters
-from rest_framework import viewsets
 from django_filters.rest_framework import DjangoFilterBackend
-from django_filters import rest_framework as django_filters
+
+from rest_framework import (
+    generics,
+    serializers,
+    status,
+    viewsets,
+    permissions,
+)
 from rest_framework.decorators import action
-from rest_framework import status, permissions
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.tokens import RefreshToken
 
+# Importações locais
+from .models import (
+    Candidato,
+    Cidade,
+    Curso,
+    CursoPolo,
+    Endereco,
+    HistoricoEducacional,
+    Inscricao,
+    InscricaoLog,
+    Pais,
+    Polo,
+    Tela,
+    UsuarioAdmin,
+    UsuarioTela,
+)
+from .serializers import (
+    CandidatoSerializer,
+    CidadeSerializer,
+    CursoSerializer,
+    HistoricoEducacionalSerializer,
+    InscricaoLogSerializer,
+    InscricaoSerializer,
+    PoloSerializer,
+    TelaSerializer,
+    UsuarioAdminListSerializer,
+    UsuarioAdminLoginSerializer,
+    UsuarioAdminRegistroSerializer,
+    UsuarioAdminUpdateSerializer,
+)
+from .utils import (
+    enviar_email,
+    enviar_email_aprovacao,
+    enviar_email_recuperacao,
+    enviar_email_rejeicao,
+)
 
-
-
-
-
+"""
+Retorna uma lista de cursos com filtros opcionais de nome e datas.
+"""
 class CursoListView(generics.ListAPIView):
     queryset = Curso.objects.all()
     serializer_class = CursoSerializer
@@ -67,6 +114,9 @@ class CursoListView(generics.ListAPIView):
 
         return queryset
 
+    """
+    Retorna os polos associados a um curso específico.
+    """
 class PolosByCursoView(generics.GenericAPIView):
     serializer_class = PoloSerializer
 
@@ -87,6 +137,10 @@ class PolosByCursoView(generics.GenericAPIView):
         serializer = self.get_serializer(polos, many=True)
         return Response(serializer.data)
 
+    """
+    Cria uma nova inscrição para um candidato, incluindo validações e processamento
+    de dados como nacionalidade, naturalidade, e polo.
+    """
 class PostInscricao(generics.CreateAPIView):
     queryset = Inscricao.objects.all()
     serializer_class = InscricaoSerializer
@@ -207,6 +261,9 @@ class PostInscricao(generics.CreateAPIView):
         )
 
 
+    """
+    Filtra e retorna uma lista de cidades com base no nome fornecido.
+    """
 class GetSearchCidade(generics.GenericAPIView):
     serializer_class = CidadeSerializer
 
@@ -235,6 +292,9 @@ class GetSearchCidade(generics.GenericAPIView):
         
 
 
+    """
+    Recupera e retorna as informações de um candidato e suas inscrições com base em uma hash única.
+    """
 class CandidatoPorHashView(APIView):
     def get(self, request, hash, format=None):
         # Passo 1: Buscar a inscrição usando a hash
@@ -274,6 +334,9 @@ class CandidatoPorHashView(APIView):
 
         return Response(candidato_data, status=status.HTTP_200_OK)
     
+    """
+    Retorna os detalhes de uma inscrição específica, incluindo curso, candidato e polos.
+    """
 class InscricaoDetailView(APIView):
     def get(self, request, inscricao_id, hash, format=None):
         # Obtendo a inscrição específica
@@ -368,6 +431,9 @@ class InscricaoDetailView(APIView):
         return Response(inscricao_data, status=status.HTTP_200_OK)
     
 
+    """
+    Busca e retorna um arquivo de mídia (imagem) com base no nome do arquivo.
+    """
 class MediaImageView(APIView):
     def get(self, request, filename, format=None):
         # Cria o caminho completo para o arquivo de mídia
@@ -383,6 +449,9 @@ class MediaImageView(APIView):
             return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
         
 
+    """
+    Atualiza os dados de uma inscrição e do candidato, incluindo dados de endereço e histórico educacional.
+    """
 class UpdateInscricao(APIView):
     @transaction.atomic  # Garante que todas as operações aconteçam dentro de uma transação
     def put(self, request, format=None):
@@ -483,6 +552,9 @@ class UpdateInscricao(APIView):
         serializer = InscricaoSerializer(inscricao)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
+    """
+    Registra um novo usuário admin e retorna tokens de autenticação.
+    """
 class RegistroView(APIView):
     def post(self, request):
         serializer = UsuarioAdminRegistroSerializer(data=request.data)
@@ -495,6 +567,9 @@ class RegistroView(APIView):
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    """
+    Realiza o login de um usuário admin, retornando tokens de autenticação se as credenciais forem válidas.
+    """
 class LoginView(APIView):
     def post(self, request):
         serializer = UsuarioAdminLoginSerializer(data=request.data)
@@ -513,6 +588,9 @@ class LoginView(APIView):
             return Response({'error': 'Credenciais inválidas'}, status=status.HTTP_401_UNAUTHORIZED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
+    """
+    Verifica a validade do token JWT e retorna informações do usuário autenticado.
+    """
 class VerificarTokenView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
@@ -524,6 +602,9 @@ class VerificarTokenView(APIView):
             "user_id": request.user.id
         })
     
+    """
+    Envia um e-mail de recuperação de senha para um usuário com base no e-mail fornecido.
+    """
 class SolicitarRecuperacaoSenhaView(APIView):
     def post(self, request):
         email = request.data.get('email')
@@ -535,6 +616,9 @@ class SolicitarRecuperacaoSenhaView(APIView):
         except UsuarioAdmin.DoesNotExist:
             return Response({"message": "Se o e-mail existir, o e-mail de recuperação será enviado."}, status=status.HTTP_200_OK)
         
+    """
+    Permite alterar a senha de um usuário usando um token de recuperação.
+    """
 class AlterarSenhaView(APIView):
     def post(self, request):
         token = request.data.get('token')
@@ -555,6 +639,9 @@ class AlterarSenhaView(APIView):
         except UsuarioAdmin.DoesNotExist:
             return Response({"message": "Token inválido."}, status=status.HTTP_400_BAD_REQUEST)
 
+    """
+    Verifica se o usuário tem permissão para acessar uma rota específica.
+    """
 class VerificarAcessoTela(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -576,6 +663,9 @@ class VerificarAcessoTela(APIView):
         except UsuarioAdmin.DoesNotExist:
             return Response({'erro': 'Usuário não encontrado'}, status=404)
         
+    """
+    Gera e retorna dados para diversos gráficos estatísticos, como inscrições por polo, distribuição por gênero, etc.
+    """
 class GraficosView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -678,6 +768,9 @@ class GraficosView(APIView):
             'nivel_escolaridade': list(nivel_escolaridade)
         })
     
+    """
+    Cria um novo curso e associa polos a ele.
+    """
 class CursoCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     queryset = Curso.objects.all()
@@ -702,11 +795,17 @@ class CursoCreateView(generics.CreateAPIView):
         
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     
+    """
+    Retorna uma lista de todos os polos.
+    """
 class PoloListView(generics.ListAPIView):
     queryset = Polo.objects.all()
     serializer_class = PoloSerializer
     pagination_class = None  # Desativa a paginação
 
+    """
+    Retorna os detalhes de um curso específico, incluindo polos associados.
+    """
 class CursoDetailView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
     queryset = Curso.objects.all()
@@ -728,6 +827,9 @@ class CursoDetailView(generics.RetrieveAPIView):
         return Response(data)
     
 
+    """
+    Atualiza os dados de um curso e os polos associados.
+    """
 class CursoUpdateView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
     queryset = Curso.objects.all()
@@ -762,6 +864,9 @@ class CursoUpdateView(generics.UpdateAPIView):
         return Response(data)
     
 
+    """
+    Filtros de pesquisa para o modelo UsuarioAdmin com base em nome e e-mail.
+    """
 class UsuarioAdminFilter(filters.FilterSet):
     nome = filters.CharFilter(field_name='nome_completo', lookup_expr='icontains')
     email = filters.CharFilter(lookup_expr='icontains')
@@ -770,12 +875,18 @@ class UsuarioAdminFilter(filters.FilterSet):
         model = UsuarioAdmin
         fields = ['nome', 'email']
 
+    """
+    Permite visualizar a lista de telas disponíveis para o usuário autenticado.
+    """
 class TelaViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Desativa a paginação
     queryset = Tela.objects.all()
     serializer_class = TelaSerializer
 
+    """
+    Permite gerenciar usuários admin, incluindo criação, atualização, e adição de telas.
+    """
 class UsuarioAdminViewSet(viewsets.ModelViewSet):
     queryset = UsuarioAdmin.objects.all()
     pagination_class = None  # Desativa a paginação
@@ -857,18 +968,24 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
         
         return Response(data)
     
-class InscricaoFilter(django_filters.FilterSet):
-    nome = django_filters.CharFilter(field_name='candidato__nome_completo', lookup_expr='icontains')
-    curso = django_filters.NumberFilter(field_name='curso__id')
-    polo = django_filters.NumberFilter(field_name='candidato__polo_ofertante__id')
-    data_inicial = django_filters.DateFilter(field_name='data_criacao', lookup_expr='gte')
-    data_final = django_filters.DateFilter(field_name='data_criacao', lookup_expr='lte')
+    """
+    Filtros para buscar inscrições com base no candidato, curso, polo e data.
+    """
+class InscricaoFilter(filters.FilterSet):
+    nome = filters.CharFilter(field_name='candidato__nome_completo', lookup_expr='icontains')
+    curso = filters.NumberFilter(field_name='curso__id')
+    polo = filters.NumberFilter(field_name='candidato__polo_ofertante__id')
+    data_inicial = filters.DateFilter(field_name='data_criacao', lookup_expr='gte')
+    data_final = filters.DateFilter(field_name='data_criacao', lookup_expr='lte')
     
     class Meta:
         model = Inscricao
         fields = ['status']
 
 
+    """
+    Permite gerenciar inscrições, incluindo listagem, visualização detalhada, e atualização.
+    """
 class InscricaoViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Inscricao.objects.all().select_related(
@@ -972,6 +1089,9 @@ class InscricaoViewSet(viewsets.ModelViewSet):
         
     #     return response
 
+    """
+    Aprova uma inscrição, atualizando seu status e registrando um log.
+    """
 class AprovarInscricaoView(APIView):
     permission_classes = [IsAuthenticated]
     def post(self, request, pk, format=None):
@@ -1003,6 +1123,9 @@ class AprovarInscricaoView(APIView):
         except Inscricao.DoesNotExist:
             return Response({'erro': 'Inscrição não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         
+    """
+    Rejeita uma inscrição, atualizando seu status e registrando o motivo da rejeição.
+    """
 class RecusarInscricaoView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1040,6 +1163,9 @@ class RecusarInscricaoView(APIView):
         except Inscricao.DoesNotExist:
             return Response({'erro': 'Inscrição não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         
+    """
+    Retorna o histórico de logs de uma inscrição específica.
+    """
 class InscricaoHistoricoView(APIView):
     permission_classes = [IsAuthenticated]
 
