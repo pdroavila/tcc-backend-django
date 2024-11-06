@@ -1,29 +1,24 @@
-# Dockerfile for Django Backend
-FROM python:3.12-slim
+FROM python:3.10-slim
 
-# Instale as dependências do sistema para compilar mysqlclient
+# Instalar dependências do sistema
 RUN apt-get update && apt-get install -y \
-    gcc \
-    default-libmysqlclient-dev \
+    build-essential \
     pkg-config \
-    libssl-dev \
-    libmariadb-dev-compat \
-    libmariadb-dev
+    default-libmysqlclient-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Defina o diretório de trabalho dentro do container
+# Definir o diretório de trabalho
 WORKDIR /app
 
-# Copie o arquivo de requirements para instalar dependências
-COPY requirements.txt /app/
+# Copiar os arquivos do projeto
+COPY . /app
 
-# Instale as dependências Python
+# Instalar dependências do Python
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copie todo o código da aplicação para o container
-COPY . /app/
-
-# Exponha a porta 8000
+# Expor a porta que o Django vai rodar
 EXPOSE 8000
 
-# Comando para rodar o servidor
+# Comando para rodar a aplicação
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

@@ -32,6 +32,7 @@ ALLOWED_HOSTS = ["127.0.0.1"]
 # Application definition
 
 INSTALLED_APPS = [
+    'api',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -39,7 +40,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'api',
     'corsheaders',
     'rest_framework_simplejwt',
     'django_filters'
@@ -100,10 +100,10 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'fic',
-        'USER': 'fic_admin',
-        'PASSWORD': 'fic123',
-        'HOST': 'localhost',  # ou o IP do servidor de banco de dados
+        'NAME': os.environ.get('DATABASE_NAME', 'seu_banco_de_dados'),
+        'USER': os.environ.get('DATABASE_USER', 'seu_usuario'),
+        'PASSWORD': os.environ.get('DATABASE_PASSWORD', 'sua_senha'),
+        'HOST': os.environ.get('DATABASE_HOST', 'db'),
         'PORT': '3306',  # Porta padrão do MySQL
         'CONN_MAX_AGE': 600,  # mantém conexões por 10 minutos
         'OPTIONS': {

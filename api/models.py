@@ -3,7 +3,7 @@
 #   * Rearrange models' order
 #   * Make sure each model has one field with primary_key=True
 #   * Make sure each ForeignKey and OneToOneField has `on_delete` set to the desired behavior
-#   * Remove `managed = False` lines if you wish to allow Django to create, modify, and delete the table
+#   * Remove `# managed = False` lines if you wish to allow Django to create, modify, and delete the table
 # Feel free to rename the models, but don't rename db_table values or field names.
 from django.db import models
 import hashlib
@@ -63,7 +63,7 @@ class Candidato(models.Model):
     
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'candidato'
 
 
@@ -73,7 +73,7 @@ class Cidade(models.Model):
     uf = models.ForeignKey('Estado', models.DO_NOTHING, db_column='uf', blank=True, null=True)
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'cidade'
         db_table_comment = 'Municipios das Unidades Federativas'
 
@@ -84,7 +84,7 @@ class Curso(models.Model):
     prazo_inscricoes = models.DateTimeField()
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'curso'
 
 
@@ -93,7 +93,7 @@ class CursoPolo(models.Model):
     polo = models.ForeignKey('Polo', models.DO_NOTHING)
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'curso_polo'
         unique_together = (('curso', 'polo'),)
 
@@ -112,7 +112,7 @@ class Endereco(models.Model):
     complemento = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'endereco'
 
 
@@ -125,7 +125,7 @@ class Estado(models.Model):
     ddd = models.CharField(max_length=50, blank=True, null=True)
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'estado'
         db_table_comment = 'Unidades Federativas'
 
@@ -135,7 +135,7 @@ class Funcao(models.Model):
     descricao = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'funcao'
 
 
@@ -144,7 +144,7 @@ class FuncaoPermissao(models.Model):
     permissao = models.ForeignKey('Permissao', models.DO_NOTHING)
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'funcao_permissao'
         unique_together = (('funcao', 'permissao'),)
 
@@ -157,7 +157,7 @@ class HistoricoEducacional(models.Model):
     anexo_historico_escolar = models.ImageField(upload_to=file_location, null=False, blank=True)
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'historico_educacional'
 
 
@@ -171,7 +171,7 @@ class Inscricao(models.Model):
     data_modificacao = models.DateTimeField()
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'inscricao'
 
 
@@ -183,7 +183,7 @@ class Pais(models.Model):
     bacen = models.IntegerField(blank=True, null=True)
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'pais'
         db_table_comment = 'PaÝses e Naþ§es'
 
@@ -193,7 +193,7 @@ class Permissao(models.Model):
     descricao = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'permissao'
 
 
@@ -205,7 +205,7 @@ class Polo(models.Model):
     cidade = models.ForeignKey(Cidade, models.DO_NOTHING, blank=True, null=True)
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'polo'
 
 
@@ -235,7 +235,7 @@ class UsuarioAdmin(AbstractBaseUser):
     token_expira_em = models.DateTimeField(blank=True, null=True)
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'usuario_admin'
 
     def gerar_token_recuperacao_senha(self):
@@ -257,7 +257,7 @@ class UsuarioAdminFuncao(models.Model):
     funcao = models.ForeignKey(Funcao, models.DO_NOTHING)
 
     class Meta:
-        managed = False
+        # managed = False
         db_table = 'usuario_admin_funcao'
         unique_together = (('usuario_admin', 'funcao'))
 
