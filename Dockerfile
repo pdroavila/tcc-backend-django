@@ -5,6 +5,8 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     pkg-config \
     default-libmysqlclient-dev \
+    netcat-traditional \
+    default-mysql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Definir o diretório de trabalho
@@ -17,8 +19,12 @@ COPY . /app
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copiar o script de entrada
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Expor a porta que o Django vai rodar
 EXPOSE 8000
 
-# Comando para rodar a aplicação
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Usar o entrypoint.sh como ponto de entrada
+ENTRYPOINT ["/app/entrypoint.sh"]

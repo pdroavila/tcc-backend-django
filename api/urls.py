@@ -27,11 +27,14 @@ from .views import (
     AprovarInscricaoView,
     RecusarInscricaoView,
     InscricaoHistoricoView,
+    ValidateRGView,
 
     # ViewSets Administrativos
     TelaViewSet,
     UsuarioAdminViewSet,
-    InscricaoViewSet
+    InscricaoViewSet,
+    PoloViewSet,
+    EstatisticasViewSet
 )
 
 # Configuração do Router para rotas administrativas
@@ -39,6 +42,8 @@ router = DefaultRouter()
 router.register(r'admin/usuarios', UsuarioAdminViewSet, basename='usuario-admin')
 router.register(r'admin/telas', TelaViewSet, basename='tela')
 router.register(r'admin/inscricoes', InscricaoViewSet, basename='inscricao')  # Adicionado ao router
+router.register(r'admin/polos', PoloViewSet, basename='polo')
+router.register(r'admin/estatisticas', EstatisticasViewSet, basename='estatisticas')
 # /api/admin/inscricoes/
 
 urlpatterns = [
@@ -70,4 +75,7 @@ urlpatterns = [
 
     # Inclusão das rotas do Router Administrativo
     path('', include(router.urls)),
+
+    path('validar_rg/', ValidateRGView.as_view(), name='validate_rg'),
+
 ]

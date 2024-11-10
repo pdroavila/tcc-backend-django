@@ -1,7 +1,14 @@
 # Importações da biblioteca padrão
 import hashlib
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from decimal import Decimal
+
+# import tensorflow as tf
+# import numpy as np
+import base64
+from PIL import Image
+from io import BytesIO
 
 # Importações de terceiros
 from django.conf import settings
@@ -16,7 +23,11 @@ from django.db.models import (
     Q,
     Value,
     When,
+    Count, 
+    Avg,
+    DecimalField
 )
+from django.db.models.functions import ExtractYear, Now
 from django.shortcuts import get_object_or_404
 from django.http import FileResponse, Http404
 from django.utils import timezone
@@ -55,6 +66,7 @@ from .models import (
     UsuarioAdmin,
     UsuarioTela,
 )
+
 from .serializers import (
     CandidatoSerializer,
     CidadeSerializer,
@@ -68,13 +80,39 @@ from .serializers import (
     UsuarioAdminLoginSerializer,
     UsuarioAdminRegistroSerializer,
     UsuarioAdminUpdateSerializer,
+    EstatisticasSerializer
 )
+
 from .utils import (
     enviar_email,
     enviar_email_aprovacao,
     enviar_email_recuperacao,
     enviar_email_rejeicao,
 )
+
+model_path = os.path.join(settings.BASE_DIR, 'models', 'modelo_final.h5')
+# modelo_carregado = tf.keras.models.load_model(model_path)
+
+def validate_rg(image, model):
+    # Converter imagem em array e garantir que seja gravável
+    # img = tf.keras.preprocessing.image.img_to_array(image).copy()
+    # # Alternativamente, você pode usar:
+    # # img.setflags(write=1)
+
+    # # Redimensionar a imagem
+    # img = tf.image.resize(img, [224, 224])
+
+    # # Expandir dimensões
+    # img = np.expand_dims(img, axis=0)
+
+    # Normalizar a imagem
+    img = img / 255.0  # Evitar operação in-place
+
+    # Fazer a predição
+    prediction = model.predict(img)
+
+    return prediction[0][0] > 0.5
+
 
 """
 Retorna uma lista de cursos com filtros opcionais de nome e datas.
@@ -90,6 +128,7 @@ class CursoListView(generics.ListAPIView):
         nome = self.request.query_params.get('nome', None)
         data_inicial = self.request.query_params.get('data_inicial', None)
         data_final = self.request.query_params.get('data_final', None)
+        polo = self.request.query_params.get('polo', None)
 
         if nome:
             queryset = queryset.filter(nome__icontains=nome)
@@ -110,6 +149,13 @@ class CursoListView(generics.ListAPIView):
                 data_final = make_aware(data_final)  # Converte para timezone-aware
                 queryset = queryset.filter(prazo_inscricoes__lte=data_final)
             except ValueError:
+                pass
+
+        if polo:
+            try:
+                polo_id = int(polo)
+                queryset = queryset.filter(cursopolo__polo_id=polo_id)
+            except (ValueError, Polo.DoesNotExist):
                 pass
 
         return queryset
@@ -277,7 +323,7 @@ class GetSearchCidade(generics.GenericAPIView):
             return Cidade.objects.filter(nome__icontains=nome_cidade)
         else:
             # Retorna uma queryset vazia se o parâmetro 'nome' não for fornecido
-            return Cidade.objects.none()
+            return Cidade.objects.all()
 
     def get(self, request, *args, **kwargs):
         """
@@ -627,7 +673,7 @@ class AlterarSenhaView(APIView):
         try:
             usuario = UsuarioAdmin.objects.get(token_recuperacao_senha=token)
 
-            if (timezone.now() - timedelta(hours=3)) > timezone.localtime(usuario.token_expira_em):
+            if (timezone.now()) > timezone.localtime(usuario.token_expira_em):
                 return Response({"message": "Token expirado."}, status=status.HTTP_400_BAD_REQUEST)
 
             print(nova_senha)
@@ -670,31 +716,43 @@ class GraficosView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        id_polo = request.query_params.get('id_polo')
+        base_queryset = Candidato.objects.all()
+        endereco_queryset = Endereco.objects.all()
+        historico_queryset = HistoricoEducacional.objects.all()
+
+        if id_polo:
+            base_queryset = base_queryset.filter(polo_ofertante_id=id_polo)
+            endereco_queryset = endereco_queryset.filter(candidato__polo_ofertante_id=id_polo)
+            historico_queryset = historico_queryset.filter(candidato__polo_ofertante_id=id_polo)
+
         # Inscrições por Polo Ofertante
-        inscricoes_por_polo = Candidato.objects.values('polo_ofertante__nome').annotate(total=Count('id')).order_by('polo_ofertante__nome')
+        inscricoes_por_polo = base_queryset.values('polo_ofertante__nome').annotate(
+            total=Count('id')
+        ).order_by('polo_ofertante__nome')
         
-        # Tipo de Escola (agora usando HistoricoEducacional)
-        tipo_escola = HistoricoEducacional.objects.annotate(
-                escola_tipo=Case(
-                    When(tipo_escola=0, then=Value('Pública')),
-                    When(tipo_escola=1, then=Value('Privada')),
-                    output_field=CharField(),
-                )
-            ).values('escola_tipo').annotate(total=Count('id'))   
-             
+        # Tipo de Escola
+        tipo_escola = historico_queryset.annotate(
+            escola_tipo=Case(
+                When(tipo_escola=0, then=Value('Pública')),
+                When(tipo_escola=1, then=Value('Privada')),
+                output_field=CharField(),
+            )
+        ).values('escola_tipo').annotate(total=Count('id'))
+        
         # Distribuição por Gênero
-        distribuicao_genero = Candidato.objects.annotate(
-                genero_tipo=Case(
-                    When(genero=0, then=Value('Não informado')),
-                    When(genero=1, then=Value('Masculino')),
-                    When(genero=2, then=Value('Feminino')),
-                    When(genero=3, then=Value('Outro')),
-                    output_field=CharField(),
-                )
-            ).values('genero_tipo').annotate(total=Count('id'))
+        distribuicao_genero = base_queryset.annotate(
+            genero_tipo=Case(
+                When(genero=0, then=Value('Não informado')),
+                When(genero=1, then=Value('Masculino')),
+                When(genero=2, then=Value('Feminino')),
+                When(genero=3, then=Value('Outro')),
+                output_field=CharField(),
+            )
+        ).values('genero_tipo').annotate(total=Count('id'))
         
-         # Estado Civil (com as regras fornecidas)
-        estado_civil = Candidato.objects.annotate(
+        # Estado Civil
+        estado_civil = base_queryset.annotate(
             estado_civil_tipo=Case(
                 When(estado_civil=0, then=Value('Solteiro(a)')),
                 When(estado_civil=1, then=Value('Casado(a)')),
@@ -705,7 +763,7 @@ class GraficosView(APIView):
         ).values('estado_civil_tipo').annotate(total=Count('id'))
 
         # Renda per Capita
-        renda_per_capita = Candidato.objects.annotate(
+        renda_per_capita = base_queryset.annotate(
             renda_tipo=Case(
                 When(renda_per_capita=1, then=Value('Até 0,5 salário mínimo')),
                 When(renda_per_capita=2, then=Value('0,5 a 1,0 salário mínimo')),
@@ -719,7 +777,7 @@ class GraficosView(APIView):
         ).values('renda_tipo').annotate(total=Count('id'))
 
         # Distribuição por Etnia
-        distribuicao_etnia = Candidato.objects.annotate(
+        distribuicao_etnia = base_queryset.annotate(
             etnia_tipo=Case(
                 When(etnia=1, then=Value('Branco')),
                 When(etnia=2, then=Value('Preto')),
@@ -732,7 +790,7 @@ class GraficosView(APIView):
         ).values('etnia_tipo').annotate(total=Count('id'))
 
         # Área de Residência
-        area_residencia = Endereco.objects.annotate(
+        area_residencia = endereco_queryset.annotate(
             area_tipo=Case(
                 When(area=0, then=Value('Urbana')),
                 When(area=1, then=Value('Rural')),
@@ -741,7 +799,7 @@ class GraficosView(APIView):
         ).values('area_tipo').annotate(total=Count('id'))
 
         # Nível de Escolaridade
-        nivel_escolaridade = HistoricoEducacional.objects.annotate(
+        nivel_escolaridade = historico_queryset.annotate(
             escolaridade_tipo=Case(
                 When(nivel_escolaridade=0, then=Value('Fundamental I - Completo (1º a 5º)')),
                 When(nivel_escolaridade=1, then=Value('Fundamental I - Incompleto (1º a 5º)')),
@@ -802,6 +860,19 @@ class PoloListView(generics.ListAPIView):
     queryset = Polo.objects.all()
     serializer_class = PoloSerializer
     pagination_class = None  # Desativa a paginação
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        nome = self.request.query_params.get('nome', None)
+        cidade = self.request.query_params.get('cidade', None)
+
+        if nome:
+            queryset = queryset.filter(nome__icontains=nome)
+
+        if cidade:
+            queryset = queryset.filter(cidade_id=cidade)
+
+        return queryset
 
     """
     Retorna os detalhes de um curso específico, incluindo polos associados.
@@ -1111,7 +1182,7 @@ class AprovarInscricaoView(APIView):
                 status=1, 
                 observacoes='Inscrição aprovada.',
                 usuario=usuario_admin,
-                data_registro = (timezone.now() - timedelta(hours=3))
+                data_registro = (timezone.now())
             )
 
             enviar_email_aprovacao(
@@ -1148,7 +1219,7 @@ class RecusarInscricaoView(APIView):
                 status=0, 
                 observacoes=motivo,
                 usuario=usuario_admin,
-                data_registro = (timezone.now() - timedelta(hours=3))
+                data_registro = (timezone.now())
             )
 
             enviar_email_rejeicao(
@@ -1178,3 +1249,104 @@ class InscricaoHistoricoView(APIView):
         
         serializer = InscricaoLogSerializer(logs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+class ValidateRGView(APIView):
+    def post(self, request):
+        base64_image = request.data.get('image')
+
+        if not base64_image:
+            return Response({'error': 'Nenhuma imagem fornecida.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Decodificar a imagem base64
+            header, data = base64_image.split(';base64,')
+            img_format = header.split('/')[-1]
+            img_data = base64.b64decode(data)
+            image = Image.open(BytesIO(img_data)).convert('RGB')
+            
+            # Validar a imagem
+            is_rg = validate_rg(image, modelo_carregado)
+            
+            return Response({'is_rg': is_rg}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+class PoloFilter(filters.FilterSet):
+    nome = filters.CharFilter(lookup_expr='icontains')
+    cidade = filters.NumberFilter()
+    
+    class Meta:
+        model = Polo
+        fields = ['nome', 'cidade']
+
+class PoloViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = Polo.objects.all()
+    serializer_class = PoloSerializer
+    filterset_class = PoloFilter
+
+    def destroy(self, request, *args, **kwargs):
+        polo = self.get_object()
+        try:
+            CursoPolo.objects.filter(polo=polo).delete()
+            polo.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response(
+                {"error": "Erro ao excluir polo: " + str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+class EstatisticasViewSet(viewsets.ViewSet):
+    def list(self, request):
+        polo_id = request.query_params.get('polo_id', None)
+        
+        # Base query
+        queryset = Inscricao.objects.select_related('candidato')
+        
+        # Filtrar por polo se fornecido
+        if polo_id:
+            queryset = queryset.filter(candidato__polo_ofertante=polo_id)
+        
+        # Calcular estatísticas
+        hoje = date.today()
+        
+        # Total de inscrições
+        total_inscricoes = queryset.count()
+        
+        # Média de idade
+        media_idade = queryset.annotate(
+            idade=hoje.year - ExtractYear('candidato__data_nascimento')
+        ).aggregate(
+            media_idade=Avg('idade')
+        )['media_idade'] or 0
+        
+        # Média de renda
+        # Mapeamento dos valores de renda baseado nos tipos do banco
+        RENDA_MAPPING = {
+            1: Decimal('1000.00'),    # Até 1 salário mínimo
+            2: Decimal('2000.00'),    # 1-2 salários mínimos
+            3: Decimal('3500.00'),    # 2-3 salários mínimos
+            4: Decimal('5000.00'),    # 3-5 salários mínimos
+            5: Decimal('7500.00')     # mais de 5 salários mínimos
+        }
+        
+        media_renda = queryset.annotate(
+            valor_renda=Case(
+                *[When(candidato__renda_per_capita=k, then=v) 
+                  for k, v in RENDA_MAPPING.items()],
+                default=Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=10, decimal_places=2),
+            )
+        ).aggregate(
+            media_renda=Avg('valor_renda')
+        )['media_renda'] or Decimal('0.00')
+        
+        estatisticas = {
+            'total_inscricoes': total_inscricoes,
+            'media_idade': round(Decimal(str(media_idade)), 2),
+            'media_renda': round(media_renda, 2)
+        }
+        
+        serializer = EstatisticasSerializer(estatisticas)
+        return Response(serializer.data)

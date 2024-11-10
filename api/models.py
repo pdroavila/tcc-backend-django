@@ -15,6 +15,7 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from django.utils import timezone
 from datetime import timedelta
 import uuid
+from django.core.validators import MinValueValidator
 
 # Função para gerar um nome único baseado no nome do arquivo e informações adicionais
 def generate_hashed_filename(filename):
@@ -47,6 +48,8 @@ class Candidato(models.Model):
     registro_geral = models.CharField(max_length=50)
     anexo_cpf = models.ImageField(upload_to=file_location, null=False, blank=True)
     anexo_rg = models.ImageField(upload_to=file_location, null=False, blank=True)
+    validacao_anexo_cpf = models.PositiveSmallIntegerField(default=0)
+    validacao_anexo_rg = models.PositiveSmallIntegerField(default=0)
     nacionalidade = models.ForeignKey('Pais', models.DO_NOTHING, db_column='nacionalidade')
     naturalidade = models.ForeignKey('Cidade', models.DO_NOTHING, db_column='naturalidade')
     data_nascimento = models.DateField()
@@ -82,6 +85,12 @@ class Curso(models.Model):
     nome = models.CharField(max_length=255)
     descricao = models.CharField(max_length=255, blank=True, null=True)
     prazo_inscricoes = models.DateTimeField()
+    carga_horaria = models.DecimalField(
+        max_digits=5,        # Total de dígitos (incluindo as casas decimais)
+        decimal_places=2,    # Número de casas decimais
+        validators=[MinValueValidator(0)],  # Garante que a carga horária seja não negativa
+    )
+    requisitos = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         # managed = False
@@ -89,7 +98,7 @@ class Curso(models.Model):
 
 
 class CursoPolo(models.Model):
-    curso = models.OneToOneField(Curso, models.DO_NOTHING, primary_key=True)  # The composite primary key (curso_id, polo_id) found, that is not supported. The first column is selected.
+    curso = models.ForeignKey('Curso', models.DO_NOTHING)
     polo = models.ForeignKey('Polo', models.DO_NOTHING)
 
     class Meta:
@@ -129,26 +138,6 @@ class Estado(models.Model):
         db_table = 'estado'
         db_table_comment = 'Unidades Federativas'
 
-
-class Funcao(models.Model):
-    nome = models.CharField(unique=True, max_length=50)
-    descricao = models.CharField(max_length=255, blank=True, null=True)
-
-    class Meta:
-        # managed = False
-        db_table = 'funcao'
-
-
-class FuncaoPermissao(models.Model):
-    funcao = models.OneToOneField(Funcao, models.DO_NOTHING, primary_key=True)  # The composite primary key (funcao_id, permissao_id) found, that is not supported. The first column is selected.
-    permissao = models.ForeignKey('Permissao', models.DO_NOTHING)
-
-    class Meta:
-        # managed = False
-        db_table = 'funcao_permissao'
-        unique_together = (('funcao', 'permissao'),)
-
-
 class HistoricoEducacional(models.Model):
     id = models.BigAutoField(primary_key=True)
     candidato = models.ForeignKey(Candidato, models.DO_NOTHING)
@@ -187,16 +176,6 @@ class Pais(models.Model):
         db_table = 'pais'
         db_table_comment = 'PaÝses e Naþ§es'
 
-
-class Permissao(models.Model):
-    nome = models.CharField(unique=True, max_length=50)
-    descricao = models.CharField(max_length=255, blank=True, null=True)
-
-    class Meta:
-        # managed = False
-        db_table = 'permissao'
-
-
 class Polo(models.Model):
     nome = models.CharField(max_length=255)
     logradouro = models.CharField(max_length=255)
@@ -230,7 +209,6 @@ class UsuarioAdmin(AbstractBaseUser):
     ativo = models.BooleanField(default=True)
     data_criacao = models.DateTimeField(auto_now_add=True)
     data_modificacao = models.DateTimeField(auto_now=True)
-    last_login = models.DateTimeField(default=timezone.now)
     token_recuperacao_senha = models.CharField(max_length=255, blank=True, null=True)
     token_expira_em = models.DateTimeField(blank=True, null=True)
 
@@ -240,7 +218,7 @@ class UsuarioAdmin(AbstractBaseUser):
 
     def gerar_token_recuperacao_senha(self):
         self.token_recuperacao_senha = str(uuid.uuid4())
-        self.token_expira_em = timezone.now() + timedelta(minutes=10) - timedelta(hours=3)
+        self.token_expira_em = timezone.now() + timedelta(minutes=10)
         self.save()
 
     objects = UsuarioAdminManager()
@@ -250,17 +228,6 @@ class UsuarioAdmin(AbstractBaseUser):
 
     def __str__(self):
         return self.email
-
-
-class UsuarioAdminFuncao(models.Model):
-    usuario_admin = models.OneToOneField(UsuarioAdmin, models.DO_NOTHING, primary_key=True)  # The composite primary key (usuario_admin_id, funcao_id) found, that is not supported. The first column is selected.
-    funcao = models.ForeignKey(Funcao, models.DO_NOTHING)
-
-    class Meta:
-        # managed = False
-        db_table = 'usuario_admin_funcao'
-        unique_together = (('usuario_admin', 'funcao'))
-
 
 class Tela(models.Model):
     nome = models.CharField(max_length=255, unique=True)

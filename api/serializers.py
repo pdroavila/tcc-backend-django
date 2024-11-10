@@ -12,9 +12,11 @@ class CursoSerializer(serializers.ModelSerializer):
         fields = '__all__'
         
 class PoloSerializer(serializers.ModelSerializer):
+    cidade_nome = serializers.CharField(source='cidade.nome', read_only=True)
+
     class Meta:
         model = Polo
-        fields = '__all__'
+        fields = ['id', 'nome', 'logradouro', 'numero', 'bairro', 'cidade', 'cidade_nome']
         
 class CandidatoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -185,3 +187,8 @@ class InscricaoLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = InscricaoLog
         fields = ['id', 'inscricao', 'status', 'status_display', 'data_registro', 'observacoes', 'usuario', 'usuario_nome']
+
+class EstatisticasSerializer(serializers.Serializer):
+    total_inscricoes = serializers.IntegerField()
+    media_idade = serializers.DecimalField(max_digits=5, decimal_places=2)
+    media_renda = serializers.DecimalField(max_digits=10, decimal_places=2)
