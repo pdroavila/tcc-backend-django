@@ -4,8 +4,8 @@ import os
 from datetime import datetime, timedelta, date
 from decimal import Decimal
 
-# import tensorflow as tf
-# import numpy as np
+import tensorflow as tf
+import numpy as np
 import base64
 from PIL import Image
 from io import BytesIO
@@ -90,27 +90,19 @@ from .utils import (
     enviar_email_rejeicao,
 )
 
-model_path = os.path.join(settings.BASE_DIR, 'models', 'modelo_final.h5')
-# modelo_carregado = tf.keras.models.load_model(model_path)
+model_path_rg = os.path.join(settings.BASE_DIR, 'models', 'modelo_final_rg.h5')
+modelo_carregado_rg = tf.keras.models.load_model(model_path_rg)
 
-def validate_rg(image, model):
-    # Converter imagem em array e garantir que seja gravável
-    # img = tf.keras.preprocessing.image.img_to_array(image).copy()
-    # # Alternativamente, você pode usar:
-    # # img.setflags(write=1)
+model_path_cpf = os.path.join(settings.BASE_DIR, 'models', 'modelo_final_cpf.h5')
+modelo_carregado_cpf = tf.keras.models.load_model(model_path_cpf)
 
-    # # Redimensionar a imagem
-    # img = tf.image.resize(img, [224, 224])
-
-    # # Expandir dimensões
-    # img = np.expand_dims(img, axis=0)
-
-    # Normalizar a imagem
-    img = img / 255.0  # Evitar operação in-place
-
-    # Fazer a predição
-    prediction = model.predict(img)
-
+def validate_image(image, model):
+    img_array = tf.keras.utils.img_to_array(image)
+    img_array = tf.image.resize(img_array, (224, 224))
+    img_array = np.expand_dims(img_array, axis=0)
+    img_array = img_array / 255.0
+    
+    prediction = model.predict(img_array)
     return prediction[0][0] > 0.5
 
 
@@ -1265,9 +1257,30 @@ class ValidateRGView(APIView):
             image = Image.open(BytesIO(img_data)).convert('RGB')
             
             # Validar a imagem
-            is_rg = validate_rg(image, modelo_carregado)
+            is_rg = validate_image(image, modelo_carregado_rg)
             
             return Response({'is_rg': is_rg}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+class ValidateCPFView(APIView):
+    def post(self, request):
+        base64_image = request.data.get('image')
+
+        if not base64_image:
+            return Response({'error': 'Nenhuma imagem fornecida.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Decodificar a imagem base64
+            header, data = base64_image.split(';base64,')
+            img_format = header.split('/')[-1]
+            img_data = base64.b64decode(data)
+            image = Image.open(BytesIO(img_data)).convert('RGB')
+            
+            # Validar a imagem
+            is_cpf = validate_image(image, modelo_carregado_cpf)
+            
+            return Response({'is_cpf': is_cpf}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         

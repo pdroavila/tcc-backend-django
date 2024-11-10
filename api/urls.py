@@ -28,6 +28,7 @@ from .views import (
     RecusarInscricaoView,
     InscricaoHistoricoView,
     ValidateRGView,
+    ValidateCPFView,
 
     # ViewSets Administrativos
     TelaViewSet,
@@ -77,5 +78,5 @@ urlpatterns = [
     path('', include(router.urls)),
 
     path('validar_rg/', ValidateRGView.as_view(), name='validate_rg'),
-
+    path('validar_cpf/', ValidateCPFView.as_view(), name='validate_rg'),
 ]
