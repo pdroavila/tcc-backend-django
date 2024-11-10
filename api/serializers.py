@@ -1,10 +1,20 @@
-from rest_framework import serializers
-from .models import Curso, Polo, Candidato, Inscricao, Pais, Cidade, HistoricoEducacional, UsuarioAdmin, Tela, InscricaoLog
-from drf_extra_fields.fields import Base64ImageField
 import base64
-import os
-from django.core.files.base import ContentFile
 
+from django.core.files.base import ContentFile
+from rest_framework import serializers
+
+from .models import (
+    Candidato,
+    Cidade,
+    Curso,
+    HistoricoEducacional,
+    Inscricao,
+    InscricaoLog,
+    Pais,
+    Polo,
+    Tela,
+    UsuarioAdmin,
+)
 
 class CursoSerializer(serializers.ModelSerializer):
     class Meta:

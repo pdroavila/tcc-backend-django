@@ -1,7 +1,7 @@
 # Importações da biblioteca padrão
 import hashlib
 import os
-from datetime import datetime, timedelta, date
+from datetime import datetime, date
 from decimal import Decimal
 
 import tensorflow as tf
