@@ -16,10 +16,11 @@ services:
       --default-authentication-plugin=mysql_native_password
       --default-time-zone='+00:00'
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
+      test: ["CMD", "mysql", "-h", "localhost", "-u", "${DATABASE_USER}", "-p${DATABASE_PASSWORD}", "-e", "SELECT 1;"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   web:
     build: .
@@ -28,14 +29,18 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DB_HOST=db
-      - DB_PORT=3306
+      - DATABASE_HOST=db
+      - DATABASE_PORT=3306
+      - DATABASE_NAME=${DATABASE_NAME}
+      - DATABASE_USER=${DATABASE_USER}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
       - TZ=UTC
     depends_on:
       db:
         condition: service_healthy
     env_file:
       - .env
+    command: sh -c "service cron start && python manage.py runserver 0.0.0.0:8000"
 
 volumes:
   db_data:

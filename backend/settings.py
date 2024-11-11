@@ -101,15 +101,16 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.environ.get('DATABASE_NAME', 'seu_banco_de_dados'),
-        'USER': os.environ.get('DATABASE_USER', 'seu_usuario'),
-        'PASSWORD': os.environ.get('DATABASE_PASSWORD', 'sua_senha'),
-        'HOST': os.environ.get('DATABASE_HOST', 'db'),
-        'PORT': '3306',  # Porta padrão do MySQL
-        'CONN_MAX_AGE': 600,  # mantém conexões por 10 minutos
+        'NAME': os.environ.get('DATABASE_NAME'),
+        'USER': os.environ.get('DATABASE_USER'),
+        'PASSWORD': os.environ.get('DATABASE_PASSWORD'),
+        'HOST': os.environ.get('DATABASE_HOST'),
+        'PORT': '3306',
+        'CONN_MAX_AGE': 600,
         'OPTIONS': {
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
             'charset': 'utf8mb4',
+            'connect_timeout': 10,
         },
     }
 }
