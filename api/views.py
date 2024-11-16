@@ -1,7 +1,7 @@
 # Importações da biblioteca padrão
 import hashlib
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timezone as datetime_timezone
 from decimal import Decimal
 
 import tensorflow as tf
@@ -9,6 +9,7 @@ import numpy as np
 import base64
 from PIL import Image
 from io import BytesIO
+from zoneinfo import ZoneInfo
 
 # Importações de terceiros
 from django.conf import settings
@@ -877,17 +878,36 @@ class CursoDetailView(generics.RetrieveAPIView):
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = self.get_serializer(instance)
-        
-        # Busca os polos relacionados ao curso
+
         polos_ids = CursoPolo.objects.filter(
             curso_id=instance.id
         ).values_list('polo_id', flat=True)
-        
-        # Adiciona os polos ao response
+
         data = serializer.data
         data['polos'] = list(polos_ids)
-        
+
+        prazo_inscricoes = data.get('prazo_inscricoes')
+        if prazo_inscricoes:
+            try:
+                prazo_dt = datetime.fromisoformat(prazo_inscricoes)
+
+                if prazo_dt.tzinfo is None:
+                    prazo_dt = prazo_dt.replace(tzinfo=datetime_timezone.utc)
+                else:
+                    prazo_dt = prazo_dt.astimezone(datetime_timezone.utc)
+
+                target_tz = ZoneInfo('America/Sao_Paulo')  # UTC-3
+
+                prazo_utc3 = prazo_dt.astimezone(target_tz)
+
+                formatted_prazo = prazo_utc3.strftime('%Y-%m-%dT%H:%M')
+
+                data['prazo_inscricoes'] = formatted_prazo
+            except ValueError as e:
+                data['prazo_inscricoes'] = None
+
         return Response(data)
+
     
 
     """
