@@ -29,3 +29,7 @@ Este repositório contém o código backend do meu TCC.
    docker-compose up --build
 
 7. Acesse a aplicação em http://127.0.0.1:8000/api/
+8. Modúlo admin disponível em /admin. Usuário padrão:
+   ```bash
+   admin
+   senha@@@
