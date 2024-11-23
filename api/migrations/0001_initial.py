@@ -53,6 +53,7 @@ class Migration(migrations.Migration):
                 ('nome', models.CharField(max_length=255)),
                 ('descricao', models.CharField(blank=True, max_length=255, null=True)),
                 ('prazo_inscricoes', models.DateTimeField()),
+                ('prazo_validacao', models.DateTimeField()),
                 ('carga_horaria', models.DecimalField(decimal_places=2, max_digits=5, validators=[django.core.validators.MinValueValidator(0)])),
                 ('requisitos', models.CharField(blank=True, max_length=255, null=True)),
             ],

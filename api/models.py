@@ -85,6 +85,7 @@ class Curso(models.Model):
     nome = models.CharField(max_length=255)
     descricao = models.CharField(max_length=255, blank=True, null=True)
     prazo_inscricoes = models.DateTimeField()
+    prazo_validacao = models.DateTimeField()
     carga_horaria = models.DecimalField(
         max_digits=5,        # Total de dígitos (incluindo as casas decimais)
         decimal_places=2,    # Número de casas decimais

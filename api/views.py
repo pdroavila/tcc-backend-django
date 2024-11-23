@@ -122,6 +122,7 @@ class CursoListView(generics.ListAPIView):
         data_inicial = self.request.query_params.get('data_inicial', None)
         data_final = self.request.query_params.get('data_final', None)
         polo = self.request.query_params.get('polo', None)
+        candidato = self.request.query_params.get('candidato', None)
 
         if nome:
             queryset = queryset.filter(nome__icontains=nome)
@@ -150,6 +151,14 @@ class CursoListView(generics.ListAPIView):
                 queryset = queryset.filter(cursopolo__polo_id=polo_id)
             except (ValueError, Polo.DoesNotExist):
                 pass
+        
+        if candidato:
+            try:
+                now = timezone.now().astimezone(ZoneInfo("America/Sao_Paulo"))
+                queryset = queryset.filter(prazo_inscricoes__gte=now)
+            except ValueError:
+                pass
+                
 
         return queryset
 
@@ -905,6 +914,26 @@ class CursoDetailView(generics.RetrieveAPIView):
                 data['prazo_inscricoes'] = formatted_prazo
             except ValueError as e:
                 data['prazo_inscricoes'] = None
+                
+        prazo_validacao = data.get('prazo_validacao')
+        if prazo_validacao:
+            try:
+                prazo_dt = datetime.fromisoformat(prazo_validacao)
+
+                if prazo_dt.tzinfo is None:
+                    prazo_dt = prazo_dt.replace(tzinfo=datetime_timezone.utc)
+                else:
+                    prazo_dt = prazo_dt.astimezone(datetime_timezone.utc)
+
+                target_tz = ZoneInfo('America/Sao_Paulo')  # UTC-3
+
+                prazo_utc3 = prazo_dt.astimezone(target_tz)
+
+                formatted_prazo = prazo_utc3.strftime('%Y-%m-%dT%H:%M')
+
+                data['prazo_validacao'] = formatted_prazo
+            except ValueError as e:
+                data['prazo_validacao'] = None
 
         return Response(data)
 
@@ -1104,19 +1133,16 @@ class InscricaoViewSet(viewsets.ModelViewSet):
             if polo:
                 item['polo'] = {
                     'id': polo.id,
-                    'nome': polo.nome,  # Adjust field names as per your model
-                    # Include other fields as needed
+                    'nome': polo.nome
                 }
             else:
                 item['polo'] = None
 
-            # Add 'curso' data
             curso = instance.curso
             if curso:
                 item['curso'] = {
                     'id': curso.id,
-                    'nome': curso.nome,  # Adjust field names as per your model
-                    # Include other fields as needed
+                    'nome': curso.nome,
                 }
             else:
                 item['curso'] = None
@@ -1128,19 +1154,16 @@ class InscricaoViewSet(viewsets.ModelViewSet):
         if polo:
             serialized_data['polo'] = {
                 'id': polo.id,
-                'nome': polo.nome,  # Adjust field names as per your model
-                # Include other fields as needed
+                'nome': polo.nome
             }
         else:
             serialized_data['polo'] = None
 
-        # Add 'curso' data
         curso = instance.curso
         if curso:
             serialized_data['curso'] = {
                 'id': curso.id,
-                'nome': curso.nome,  # Adjust field names as per your model
-                # Include other fields as needed
+                'nome': curso.nome,
             }
         else:
             serialized_data['curso'] = None
@@ -1354,32 +1377,32 @@ class EstatisticasViewSet(viewsets.ViewSet):
             media_idade=Avg('idade')
         )['media_idade'] or 0
         
-        # Média de renda
-        # Mapeamento dos valores de renda baseado nos tipos do banco
+        # Mapeamento das faixas para frases correspondentes
         RENDA_MAPPING = {
-            1: Decimal('1000.00'),    # Até 1 salário mínimo
-            2: Decimal('2000.00'),    # 1-2 salários mínimos
-            3: Decimal('3500.00'),    # 2-3 salários mínimos
-            4: Decimal('5000.00'),    # 3-5 salários mínimos
-            5: Decimal('7500.00')     # mais de 5 salários mínimos
+            1: 'Até 0,5 salário mínimo',
+            2: '0,5 a 1,0 salário mínimo',
+            3: '1,0 a 1,5 salário mínimo',
+            4: '1,5 a 2,5 salários mínimos',
+            5: '2,5 a 3,5 salários mínimos',
+            6: 'Acima de 3,5 salários mínimos',
+            0: 'Prefiro não informar',
         }
-        
-        media_renda = queryset.annotate(
-            valor_renda=Case(
-                *[When(candidato__renda_per_capita=k, then=v) 
-                  for k, v in RENDA_MAPPING.items()],
-                default=Value(Decimal('0.00')),
-                output_field=DecimalField(max_digits=10, decimal_places=2),
-            )
-        ).aggregate(
-            media_renda=Avg('valor_renda')
-        )['media_renda'] or Decimal('0.00')
-        
+
+        # Obter a faixa de renda mais cadastrada
+        faixa_mais_cadastrada = queryset.values('candidato__renda_per_capita').annotate(
+            count=Count('candidato__renda_per_capita')
+        ).order_by('-count').first()
+
+        if faixa_mais_cadastrada:
+            faixa_renda = RENDA_MAPPING.get(faixa_mais_cadastrada['candidato__renda_per_capita'], 'Não especificado')
+        else:
+            faixa_renda = 'Não definida' 
+
         estatisticas = {
             'total_inscricoes': total_inscricoes,
             'media_idade': round(Decimal(str(media_idade)), 2),
-            'media_renda': round(media_renda, 2)
+            'faixa_renda': faixa_renda,  # Resultado tratado
         }
-        
+
         serializer = EstatisticasSerializer(estatisticas)
         return Response(serializer.data)
