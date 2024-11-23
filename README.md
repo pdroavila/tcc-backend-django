@@ -15,7 +15,7 @@ Este repositório contém o código backend do meu TCC.
    cd tcc-backend-django
 2. Baixar os modelos de validação de documentos:<br>
    `https://drive.google.com/drive/folders/1lvqSvpyaFFQPdTTnksAGkj_6GH2iHqCI?usp=sharing`
-3. Copiar os arquivos para /models/
+3. Criar a pasta `models` e copiar os modelos para dentro
    
 4. Renomeie os arquivos de ambiente:
    ```bash
