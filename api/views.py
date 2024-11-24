@@ -10,6 +10,7 @@ import base64
 from PIL import Image
 from io import BytesIO
 from zoneinfo import ZoneInfo
+import csv
 
 # Importações de terceiros
 from django.conf import settings
@@ -30,7 +31,7 @@ from django.db.models import (
 )
 from django.db.models.functions import ExtractYear, Now
 from django.shortcuts import get_object_or_404
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
 from django.utils.timezone import make_aware
 
@@ -1101,7 +1102,52 @@ class InscricaoFilter(filters.FilterSet):
 class InscricaoViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Inscricao.objects.all().select_related(
-        'candidato', 'curso', 'candidato__polo_ofertante'
+        'candidato', 'curso', 'candidato__polo_ofertante',
+        'candidato__nacionalidade', 'candidato__naturalidade'
+    ).prefetch_related(
+        'candidato__endereco_set', 'candidato__historicoeducacional_set'
+    ).annotate(
+    genero_descricao=Case(
+        When(candidato__genero=0, then=Value('Não informado')),
+        When(candidato__genero=1, then=Value('Masculino')),
+        When(candidato__genero=2, then=Value('Feminino')),
+        When(candidato__genero=3, then=Value('Outro')),
+        default=Value('Desconhecido'),
+        output_field=CharField(),
+        )
+    ).annotate(
+    estado_civil=Case(
+        When(candidato__estado_civil=0, then=Value('Solteiro(a)')),
+        When(candidato__estado_civil=1, then=Value('Casado(a)')),
+        When(candidato__estado_civil=2, then=Value('Divorciado(a)')),
+        When(candidato__estado_civil=3, then=Value('Viúvo(a)')),
+        output_field=CharField(),
+        )
+    ).annotate(
+    renda_percapita=Case(
+            When(candidato__renda_per_capita=1, then=Value('Até 0,5 salário mínimo')),
+            When(candidato__renda_per_capita=2, then=Value('0,5 a 1,0 salário mínimo')),
+            When(candidato__renda_per_capita=3, then=Value('1,0 a 1,5 salário mínimo')),
+            When(candidato__renda_per_capita=4, then=Value('1,5 a 2,5 salários mínimos')),
+            When(candidato__renda_per_capita=5, then=Value('2,5 a 3,5 salários mínimos')),
+            When(candidato__renda_per_capita=6, then=Value('Acima de 3,5 salários mínimos')),
+            When(candidato__renda_per_capita=0, then=Value('Prefiro não informar')),
+            output_field=CharField(),
+        )
+    ).annotate(
+    escolaridade=Case(
+        When(candidato__historicoeducacional__nivel_escolaridade=0, then=Value('Fundamental I - Completo (1º a 5º)')),
+        When(candidato__historicoeducacional__nivel_escolaridade=1, then=Value('Fundamental I - Incompleto (1º a 5º)')),
+        When(candidato__historicoeducacional__nivel_escolaridade=2, then=Value('Fundamental II - Completo (6º a 9º)')),
+        When(candidato__historicoeducacional__nivel_escolaridade=3, then=Value('Fundamental II - Incompleto (6º a 9º)')),
+        When(candidato__historicoeducacional__nivel_escolaridade=4, then=Value('Médio - Completo')),
+        When(candidato__historicoeducacional__nivel_escolaridade=5, then=Value('Médio - Incompleto')),
+        When(candidato__historicoeducacional__nivel_escolaridade=6, then=Value('Superior - Completo')),
+        When(candidato__historicoeducacional__nivel_escolaridade=7, then=Value('Superior - Incompleto')),
+        When(candidato__historicoeducacional__nivel_escolaridade=8, then=Value('Pós-graduação - Completo')),
+        When(candidato__historicoeducacional__nivel_escolaridade=9, then=Value('Pós-graduação - Incompleto')),
+        output_field=CharField(),
+        )
     )
     serializer_class = InscricaoSerializer
     filterset_class = InscricaoFilter
@@ -1109,22 +1155,103 @@ class InscricaoViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
 
-        # Handle pagination if it's enabled
+        if 'csv' in request.query_params:
+            return self.generate_csv_response(queryset)
+
+        # Paginação padrão para requisições sem 'csv'
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             response_data = self._add_polo_and_curso_data(serializer.data, page)
             return self.get_paginated_response(response_data)
 
+        # Retorno padrão para requisições sem 'csv'
         serializer = self.get_serializer(queryset, many=True)
         response_data = self._add_polo_and_curso_data(serializer.data, queryset)
         return Response(response_data)
 
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        response_data = self._add_single_polo_and_curso_data(serializer.data, instance)
-        return Response(response_data)
+    def generate_csv_response(self, queryset):
+        data = self._prepare_data_for_csv(queryset)
+
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="inscricoes.csv"'
+
+        writer = csv.writer(response)
+
+        if data:
+            header = data[0].keys()
+            writer.writerow(header)
+
+            for item in data:
+                writer.writerow([item.get(key, '') for key in header])
+
+        return response
+
+    def _prepare_data_for_csv(self, queryset):
+        result = []
+        for instance in queryset:
+            candidato = instance.candidato
+            genero_descricao = getattr(instance, 'genero_descricao', 'Não informado')
+            estado_civil = getattr(instance, 'estado_civil', 'Não informado')
+            renda_percapita = getattr(instance, 'renda_percapita', 'Não informado')
+            endereco = candidato.endereco_set.first() if hasattr(candidato, 'endereco_set') and candidato.endereco_set.exists() else None
+            historico = candidato.historicoeducacional_set.first() if hasattr(candidato, 'historicoeducacional_set') and candidato.historicoeducacional_set.exists() else None
+            polo = getattr(candidato, 'polo_ofertante', None)
+            nacionalidade = getattr(candidato, 'nacionalidade', None)
+            naturalidade = getattr(candidato, 'naturalidade', None)
+            curso = instance.curso
+
+            cidade_nome = None
+            if endereco and endereco.cidade:
+                if isinstance(endereco.cidade, str):
+                    cidade_nome = endereco.cidade 
+                elif hasattr(endereco.cidade, 'nome'):
+                    cidade_nome = endereco.cidade.nome  
+
+            estado_nome = None
+            if endereco and hasattr(endereco.cidade, 'estado'):
+                estado = endereco.cidade.estado
+                estado_nome = estado.nome if hasattr(estado, 'nome') else None
+            
+            item = {
+                # Dados pessoais
+                'nome_completo': candidato.nome_completo,
+                'nome_social': candidato.nome_social,
+                'nome_mae': candidato.nome_mae,
+                'cpf': candidato.cpf,
+                'registro_geral': candidato.registro_geral,
+                'data_nascimento': candidato.data_nascimento,
+                'genero': genero_descricao,
+                'telefone': candidato.telefone_celular,
+                'estado_civil': estado_civil,
+                'portador_necessidades_especiais': 'Sim' if candidato.portador_necessidades_especiais else 'Não',
+                'necessidade_especial': candidato.necessidade_especial if  candidato.necessidade_especial else 'Nenhuma',
+                'renda_percapita': renda_percapita,
+                'nacionalidade': nacionalidade.nome,
+                'naturalidade': naturalidade.nome,
+
+                # Endereço
+                'cep': endereco.cep if endereco else "Não informado",
+                'cidade': cidade_nome if cidade_nome else "Não informado",
+                'estado': estado_nome if estado_nome else "Não informado",
+                'bairro': endereco.bairro if endereco else "Não informado",
+                'logradouro': endereco.logradouro if endereco else "Não informado",
+                'numero': endereco.numero if endereco else "Não informado",
+                'complemento': endereco.complemento if endereco else "Não informado",
+
+                # Histórico educacional
+                'tipo_escola': historico.tipo_escola if historico else "Não informado",
+                'nivel_escolaridade': getattr(instance, 'escolaridade', 'Não informado'),
+
+                # Curso
+                'curso': curso.nome if curso else None,
+                'prazo_inscricoes': curso.prazo_inscricoes if curso else None,
+
+                # Polo
+                'polo': polo.nome if polo else None,
+            }
+            result.append(item)
+        return result
 
     def _add_polo_and_curso_data(self, serialized_data, instances):
         for item, instance in zip(serialized_data, instances):
@@ -1147,53 +1274,6 @@ class InscricaoViewSet(viewsets.ModelViewSet):
             else:
                 item['curso'] = None
         return serialized_data
-
-    def _add_single_polo_and_curso_data(self, serialized_data, instance):
-        candidato = instance.candidato
-        polo = getattr(candidato, 'polo_ofertante', None)
-        if polo:
-            serialized_data['polo'] = {
-                'id': polo.id,
-                'nome': polo.nome
-            }
-        else:
-            serialized_data['polo'] = None
-
-        curso = instance.curso
-        if curso:
-            serialized_data['curso'] = {
-                'id': curso.id,
-                'nome': curso.nome,
-            }
-        else:
-            serialized_data['curso'] = None
-
-        return serialized_data
-    
-    # @action(detail=False, methods=['get'])
-    # def export(self, request):
-    #     queryset = self.filter_queryset(self.get_queryset())
-        
-    #     response = HttpResponse(content_type='text/csv')
-    #     response['Content-Disposition'] = 'attachment; filename="inscricoes.csv"'
-        
-    #     writer = csv.writer(response)
-    #     writer.writerow([
-    #         'Nome Completo', 'Email', 'Curso', 'Polo', 
-    #         'Situação', 'Data de Inscrição'
-    #     ])
-        
-    #     for inscricao in queryset:
-    #         writer.writerow([
-    #             inscricao.candidato.nome_completo,
-    #             inscricao.candidato.email,
-    #             inscricao.curso.nome,
-    #             inscricao.polo.nome,
-    #             inscricao.status,
-    #             inscricao.data_criacao.strftime('%d/%m/%Y')
-    #         ])
-        
-    #     return response
 
     """
     Aprova uma inscrição, atualizando seu status e registrando um log.
