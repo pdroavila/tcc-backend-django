@@ -375,7 +375,8 @@ class CandidatoPorHashView(APIView):
                         "curso": inscricao.curso.nome,
                         "descricao": inscricao.curso.descricao,
                         "data_inscricao": inscricao.data_criacao,
-                        "status": inscricao.status
+                        "status": inscricao.status,
+                        "carga_horaria": inscricao.curso.carga_horaria
                     }
                     for inscricao in inscricoes
                 ]
